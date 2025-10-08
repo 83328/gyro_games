@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Maze Runner</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:12px}
+  canvas{background:#222;border:2px solid #333}
+  #info{margin:8px}
+  #scores{margin:8px}
+</style>
+</head>
+<body>
+  <h1>Maze Runner</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span></div>
+  <canvas id="c" width="600" height="600"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const sBlue = document.getElementById('sBlue');
+const sRed = document.getElementById('sRed');
+
+// calibration and UI controls
+const ctrlContainer = document.createElement('div');
+ctrlContainer.style.margin = '8px';
+ctrlContainer.innerHTML = `
+  <label>Calibration: <button id="calibBtn">Calibrate</button> <button id="resetCalib">Reset</button></label>
+  &nbsp; Sens X: <input id="sensitivityX" type="range" min="0.4" max="3.0" step="0.1" value="1"> <span id="sensXVal">1.0</span>
+  &nbsp; Sens Y: <input id="sensitivityY" type="range" min="0.4" max="3.0" step="0.1" value="1"> <span id="sensYVal">1.0</span>
+  &nbsp; Deadzone: <input id="deadzone" type="range" min="0" max="8" step="0.5" value="1"> <span id="dzVal">1.0</span>
+`;
+document.body.insertBefore(ctrlContainer, canvas.nextSibling);
+const calibBtn = document.getElementById('calibBtn');
+const resetCalibBtn = document.getElementById('resetCalib');
+const sensitivityX = document.getElementById('sensitivityX');
+const sensitivityY = document.getElementById('sensitivityY');
+const sensXVal = document.getElementById('sensXVal');
+const sensYVal = document.getElementById('sensYVal');
+const deadzoneEl = document.getElementById('deadzone');
+const dzVal = document.getElementById('dzVal');
+
+let calibration = {beta:0, gamma:0, has:true};
+let useOrientation = true; // prefer orientation angles when present
+let orientationAvailable = false;
+
+sensitivityX.addEventListener('input', ()=>{ sensXVal.textContent = parseFloat(sensitivityX.value).toFixed(1); });
+sensitivityY.addEventListener('input', ()=>{ sensYVal.textContent = parseFloat(sensitivityY.value).toFixed(1); });
+deadzoneEl.addEventListener('input', ()=>{ dzVal.textContent = parseFloat(deadzoneEl.value).toFixed(1); });
+calibBtn.addEventListener('click', ()=>{
+  // capture current orientation as neutral
+  if(lastDeviceOrientation){
+    calibration.beta = lastDeviceOrientation.beta || 0;
+    calibration.gamma = lastDeviceOrientation.gamma || 0;
+    calibration.has = true;
+    try{ localStorage.setItem('gyro_maze_calib', JSON.stringify(calibration)); }catch(e){}
+    appendLog('Calibrated');
+  } else {
+    appendLog('No orientation available to calibrate');
+  }
+});
+resetCalibBtn.addEventListener('click', ()=>{
+  calibration = {beta:0,gamma:0,has:false};
+  try{ localStorage.removeItem('gyro_maze_calib'); }catch(e){}
+  appendLog('Calibration reset');
+});
+
+// Maze grid
+const COLS = 15, ROWS = 15;
+const cell = {w: canvas.width/COLS, h: canvas.height/ROWS};
+let maze = [];
+
+// Players positions (grid coords)
+let players = {
+  blue: {x:0,y:ROWS-1, px:0, py:0, vx:0, vy:0},
+  red:  {x:COLS-1,y:0, px:0, py:0, vx:0, vy:0}
+};
+let scores = {blue:0, red:0};
+
+// store last orientation received from WS messages
+let lastDeviceOrientation = null;
+// rotationRate integration state per role with timestamp
+const rotState = {};
+
+// debug overlay
+const debugEl = document.createElement('div');
+debugEl.style.position = 'fixed';
+debugEl.style.right = '8px';
+debugEl.style.top = '8px';
+debugEl.style.background = 'rgba(0,0,0,0.5)';
+debugEl.style.color = '#fff';
+debugEl.style.padding = '6px';
+debugEl.style.fontSize = '12px';
+debugEl.style.zIndex = 9999;
+document.body.appendChild(debugEl);
+
+// try load calibration from localStorage
+try{ const stored = localStorage.getItem('gyro_maze_calib'); if(stored){ calibration = JSON.parse(stored); appendLog('Loaded calibration'); } }catch(e){}
+
+function initMaze(){
+  // simple randomized maze generator (depth-first)
+  maze = Array(ROWS).fill(0).map(()=>Array(COLS).fill(1));
+  const stack = [];
+  function carve(x,y){
+    maze[y][x] = 0;
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]].sort(()=>Math.random()-0.5);
+    for(const [dx,dy] of dirs){
+      const nx = x + dx*2, ny = y + dy*2;
+      if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && maze[ny][nx]===1){
+        maze[y+dy][x+dx]=0;
+        carve(nx,ny);
+      }
+    }
+  }
+  carve(0, ROWS-1);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // draw maze
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(maze[r][c]===1){
+        ctx.fillStyle='#333';
+        ctx.fillRect(c*cell.w, r*cell.h, cell.w, cell.h);
+      }
+    }
+  }
+  // draw goal squares
+  ctx.fillStyle='#0033aa'; ctx.fillRect((COLS-1)*cell.w,0,cell.w,cell.h);
+  ctx.fillStyle='#aa0000'; ctx.fillRect(0,(ROWS-1)*cell.h,cell.w,cell.h);
+
+  // draw players as circles at pixel positions
+  ctx.fillStyle='#4ea1ff';
+  ctx.beginPath(); ctx.arc(players.blue.px, players.blue.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#ff6b6b';
+  ctx.beginPath(); ctx.arc(players.red.px, players.red.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
+}
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+// Continuous movement: map beta/gamma to target velocities and integrate per-frame
+const MAX_SPEED = Math.min(cell.w,cell.h) * 6; // pixels per second
+const V_SMOOTH = 0.15; // velocity smoothing
+
+function handleTilt(role, beta, gamma){
+  const p = players[role];
+  // more intuitive mapping:
+  // prefer orientation angles if present. beta: front/back tilt, gamma: left/right tilt.
+  // apply calibration, deadzone, sensitivity and non-linear scaling for control.
+  const sensX = parseFloat(sensitivityX.value || 1);
+  const sensY = parseFloat(sensitivityY.value || 1);
+  const dead = parseFloat(deadzoneEl.value || 1);
+  let b = beta, g = gamma;
+  if(calibration.has){ b = b - calibration.beta; g = g - calibration.gamma; }
+  // invert vertical axis so tilting device up moves player up (negative canvas Y)
+  b = -b;
+  // apply deadzone
+  function applyDeadzone(v){ return Math.abs(v) < dead ? 0 : (v > 0 ? v - dead : v + dead); }
+  b = applyDeadzone(b); g = applyDeadzone(g);
+  // normalize and apply sensitivity
+  // use 35deg as comfortable full-tilt reference
+  const REF = 35;
+  // per-axis sensitivity and use tanh for smooth limiting
+  const rawX = Math.max(-1, Math.min(1, (g / REF) * sensX));
+  const rawY = Math.max(-1, Math.min(1, (b / REF) * sensY));
+  const tanh = (x) => Math.tanh(x * 1.2); // slight gain before tanh
+  const nx = tanh(rawX);
+  const ny = tanh(rawY);
+  const vxTarget = nx * MAX_SPEED;
+  const vyTarget = ny * MAX_SPEED;
+  p.vx = p.vx * (1 - V_SMOOTH) + vxTarget * V_SMOOTH;
+  p.vy = p.vy * (1 - V_SMOOTH) + vyTarget * V_SMOOTH;
+}
+
+// circle-rect collision test
+function circleRectCollide(cx,cy,r, rx,ry,rw,rh){
+  const nearestX = Math.max(rx, Math.min(cx, rx+rw));
+  const nearestY = Math.max(ry, Math.min(cy, ry+rh));
+  const dx = cx - nearestX; const dy = cy - nearestY;
+  return (dx*dx + dy*dy) < (r*r);
+}
+
+function checkGoal(role){
+  const p = players[role];
+  const cx = Math.floor(p.px / cell.w), cy = Math.floor(p.py / cell.h);
+  if(role==='blue' && cx===COLS-1 && cy===0){ scores.blue++; sBlue.textContent = scores.blue; appendLog('Blue scored!'); resetRound(); }
+  if(role==='red' && cx===0 && cy===ROWS-1){ scores.red++; sRed.textContent = scores.red; appendLog('Red scored!'); resetRound(); }
+}
+
+function appendLog(msg){
+  info.textContent = msg;
+}
+
+function resetRound(){
+  initMaze();
+  // place players at cell centers
+  players.blue = {x:0,y:ROWS-1, px: (0+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
+  players.red  = {x:COLS-1,y:0, px: (COLS-1+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
+  draw();
+}
+
+// WebSocket hookup: reuse /api/token to get backend location
+let ws=null;
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token = data.token;
+  const proto = (location.protocol==='https:')?'wss':'ws';
+  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = ()=>{ info.textContent='Connected'; };
+  ws.onmessage = (ev)=>{
+    try{
+      const d = JSON.parse(ev.data);
+      if(!d || d.role==null) return;
+        // if orientation angles are provided, prefer them (more stable for tilt)
+        if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
+          orientationAvailable = true;
+          lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
+          // update rotState timestamp to avoid spurious rotationRate integration
+          if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:Date.now()};
+          rotState[d.role].ts = Date.now();
+          handleTilt(d.role, d.orientBeta, d.orientGamma);
+        } else if(d.beta!==undefined && d.gamma!==undefined){
+          // fallback to gyroscope rotation rates — integrate roughly into tilt-like signal
+          // integrate using timestamp deltas for better stability
+          const now = Date.now();
+          if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:now};
+          const state = rotState[d.role];
+          const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02; // seconds
+          state.ts = now;
+          // d.beta/d.gamma are rotation rates (deg/s) — integrate to approximate tilt
+          state.b += (d.beta || 0) * dt;
+          state.g += (d.gamma || 0) * dt;
+          // decay to avoid unbounded drift
+          state.b *= 0.995; state.g *= 0.995;
+          // expose an estimated orientation for debug
+          lastDeviceOrientation = { beta: state.b, gamma: state.g };
+          handleTilt(d.role, state.b, state.g);
+        }
+    }catch(e){}
+  };
+  ws.onclose = ()=>{ info.textContent='Disconnected'; setTimeout(()=>location.reload(),2000); };
+}).catch(e=>{ info.textContent='No backend /api/token'; });
+
+// init
+initMaze();
+// initialize player pixel positions
+players.blue.px = (0+0.5)*cell.w; players.blue.py = (ROWS-1+0.5)*cell.h;
+players.red.px = (COLS-1+0.5)*cell.w; players.red.py = (0+0.5)*cell.h;
+
+let lastTs = performance.now();
+function frame(now){
+  const dt = Math.min(40, now - lastTs) / 1000; // seconds, clamp
+  lastTs = now;
+  // update debug overlay
+  debugEl.textContent = `orient:${orientationAvailable? 'yes':'no'}\nlast β:${(lastDeviceOrientation && lastDeviceOrientation.beta)? lastDeviceOrientation.beta.toFixed(2): 'n/a'} γ:${(lastDeviceOrientation && lastDeviceOrientation.gamma)? lastDeviceOrientation.gamma.toFixed(2): 'n/a'}\ncalib β:${(calibration && calibration.beta)?calibration.beta.toFixed(2):'0'} γ:${(calibration && calibration.gamma)?calibration.gamma.toFixed(2):'0'}`;
+  // integrate velocities -> positions
+  for(const role of ['blue','red']){
+    const p = players[role];
+    // predict new position and resolve collisions per-axis so the player can slide along walls
+    let nx = p.px + p.vx * dt;
+    let ny = p.py;
+    // collision: test X movement first
+    const r = Math.min(cell.w,cell.h)/3;
+    let collidedX = false;
+    const minC_x = Math.max(0, Math.floor((nx - r)/cell.w));
+    const maxC_x = Math.min(COLS-1, Math.floor((nx + r)/cell.w));
+    const minR_x = Math.max(0, Math.floor((ny - r)/cell.h));
+    const maxR_x = Math.min(ROWS-1, Math.floor((ny + r)/cell.h));
+    for(let rr=minR_x; rr<=maxR_x; rr++){
+      for(let cc=minC_x; cc<=maxC_x; cc++){
+        if(maze[rr][cc]===1){
+          if(circleRectCollide(nx, ny, r, cc*cell.w, rr*cell.h, cell.w, cell.h)){
+            collidedX = true;
+            break;
+          }
+        }
+      }
+      if(collidedX) break;
+    }
+    if(collidedX){
+      // block X movement (slide along wall) and zero X velocity component
+      nx = p.px;
+      p.vx = 0;
+    }
+
+    // now test Y movement at potentially updated X
+    ny = p.py + p.vy * dt;
+    let collidedY = false;
+    const minC_y = Math.max(0, Math.floor((nx - r)/cell.w));
+    const maxC_y = Math.min(COLS-1, Math.floor((nx + r)/cell.w));
+    const minR_y = Math.max(0, Math.floor((ny - r)/cell.h));
+    const maxR_y = Math.min(ROWS-1, Math.floor((ny + r)/cell.h));
+    for(let rr=minR_y; rr<=maxR_y; rr++){
+      for(let cc=minC_y; cc<=maxC_y; cc++){
+        if(maze[rr][cc]===1){
+          if(circleRectCollide(nx, ny, r, cc*cell.w, rr*cell.h, cell.w, cell.h)){
+            collidedY = true;
+            break;
+          }
+        }
+      }
+      if(collidedY) break;
+    }
+    if(collidedY){
+      // block Y movement and zero Y velocity component
+      ny = p.py;
+      p.vy = 0;
+    }
+
+    // apply resolved positions
+    p.px = nx;
+    p.py = ny;
+    // apply friction so player gradually stops when no tilt
+    const FRICTION = 0.92; // per-frame damping (0..1)
+    p.vx *= Math.pow(FRICTION, dt*60);
+    p.vy *= Math.pow(FRICTION, dt*60);
+    // ensure players stay within canvas bounds (considering radius)
+    const margin = r + 1;
+    p.px = clamp(p.px, margin, canvas.width - margin);
+    p.py = clamp(p.py, margin, canvas.height - margin);
+    checkGoal(role);
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!-- ~/gyro_stream/static/gyro.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Gyro Stream</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 1rem; }
+    button { padding: 0.6rem 1rem; margin-right: .5rem; }
+    pre { max-height: 220px; overflow:auto; background:#f7f7f7; padding:.5rem; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>Gyroscope Streamer</h2>
+  <p id="status">Idle</p>
+  <button id="startBtn">Start Streaming</button>
+  <button id="stopBtn" disabled>Stop</button>
+  <p>Logs:</p>
+  <pre id="log"></pre>
+  <p>Role:</p>
+  <button id="roleBlue" data-role="blue">Blue Player</button>
+  <button id="roleRed" data-role="red">Red Player</button>
+
+<script>
+let AUTH_TOKEN = null;
+const startBtn = document.getElementById('startBtn');
+const stopBtn  = document.getElementById('stopBtn');
+const statusEl = document.getElementById('status');
+const logEl    = document.getElementById('log');
+
+let socket = null;
+let listening = false;
+let sendCount = 0;
+let role = 'blue'; // default to blue so game will react
+let latestOrientation = {alpha: null, beta: null, gamma: null};
+
+function log(s) {
+  if (!logEl) return; // safe guard
+  const t = new Date().toISOString();
+  logEl.textContent = `${t} ${s}\n` + logEl.textContent;
+  // keep log from growing indefinitely
+  const lines = logEl.textContent.split('\n');
+  if (lines.length > 200) {
+    logEl.textContent = lines.slice(0,200).join('\n');
+  }
+}
+
+
+function buildWsUrl() {
+  const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+  return `${proto}://${location.host}/ws?token=${encodeURIComponent(AUTH_TOKEN)}`;
+}
+
+// Fetch token from backend before starting
+fetch('/api/token')
+  .then(response => response.json())
+  .then(data => {
+    AUTH_TOKEN = data.token;
+    log('Loaded token from backend');
+  })
+  .catch(err => {
+    log('Failed to fetch token: ' + err);
+  });
+
+function openSocket() {
+  const url = buildWsUrl();
+  log('Connecting: ' + url);
+  socket = new WebSocket(url);
+  socket.onopen = () => {
+    statusEl.textContent = 'WebSocket connected';
+    log('WebSocket open');
+  };
+  socket.onclose = () => {
+    statusEl.textContent = 'WebSocket closed';
+    log('WebSocket closed');
+  };
+  socket.onerror = (e) => {
+    log('Socket error');
+    // suppressed console.warn to reduce noise
+  };
+}
+
+function handleMotion(e) {
+  if (!listening) return;
+  const r = e.rotationRate || {};
+  const acc = e.acceleration || e.accelerationIncludingGravity || {};
+  // minimal payload: timestamp and beta only
+  const payload = {
+    t: Date.now(),
+    // gyro rotation rates (deg/s)
+    beta: r.beta || 0,
+    gamma: r.gamma || 0,
+    // orientation angles (deg) when available — more stable for tilt controls
+    orientAlpha: latestOrientation.alpha,
+    orientBeta: latestOrientation.beta,
+    orientGamma: latestOrientation.gamma,
+    // acceleration (m/s^2) — can be used for flick/momentum controls
+    ax: acc.x || 0,
+    ay: acc.y || 0,
+    az: acc.z || 0,
+    role
+  };
+  const s = JSON.stringify(payload);
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(s);
+  }
+  // throttle logs to once every 20 sends to avoid flooding the UI
+  sendCount += 1;
+  if (sendCount % 20 === 0) {
+    log('sent: ' + s);
+  }
+}
+
+// role button handlers
+function applyRoleColor(r) {
+  if (r === 'blue') {
+    document.body.style.background = '#4ea1ff';
+    document.body.style.color = '#e6f4ff';
+  } else if (r === 'red') {
+    document.body.style.background = '#ff6b6b';
+    document.body.style.color = '#ffe6e6';
+  } else {
+    document.body.style.background = '';
+    document.body.style.color = '';
+  }
+}
+
+document.getElementById('roleBlue').addEventListener('click', () => { role='blue'; applyRoleColor('blue'); log('Role=blue'); });
+document.getElementById('roleRed').addEventListener('click', () => { role='red'; applyRoleColor('red'); log('Role=red'); });
+
+// keep latest deviceorientation around so we can include it with motion payloads
+window.addEventListener('deviceorientation', (ev) => {
+  // ev.alpha/beta/gamma can be null on some devices
+  latestOrientation.alpha = (ev.alpha !== null && ev.alpha !== undefined) ? ev.alpha : latestOrientation.alpha;
+  latestOrientation.beta  = (ev.beta  !== null && ev.beta  !== undefined) ? ev.beta  : latestOrientation.beta;
+  latestOrientation.gamma = (ev.gamma !== null && ev.gamma !== undefined) ? ev.gamma : latestOrientation.gamma;
+}, {passive:true});
+
+// streaming uses the minimal handleMotion payload (t, beta, role)
+// ensure only the basic handler is registered when streaming starts
+
+async function startStreaming() {
+  try {
+    // iOS requirement: request permission if available
+    // request permission for motion and orientation on iOS
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const p = await DeviceMotionEvent.requestPermission();
+      if (p !== 'granted') {
+        alert('Motion permission denied');
+        return;
+      }
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try { await DeviceOrientationEvent.requestPermission(); } catch(e) { /* non-fatal */ }
+    }
+  } catch (err) {
+    log('Permission request failed');
+  }
+
+  openSocket();
+  listening = true;
+  window.addEventListener('devicemotion', handleMotion);
+  // deviceorientation listener was already added above to cache values; ensure it's active
+  // nothing else needed here
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  statusEl.textContent = 'Streaming...';
+}
+
+function stopStreaming() {
+  listening = false;
+  window.removeEventListener('devicemotion', handleMotion);
+  if (socket) socket.close();
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  statusEl.textContent = 'Stopped';
+}
+
+startBtn.addEventListener('click', startStreaming);
+stopBtn.addEventListener('click', stopStreaming);
+</script>
+</body>
+</html>

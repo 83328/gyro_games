@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gyro Paddle</title>
+    <style>
+        body { font-family: Arial, sans-serif; background:#111; color:#eee; display:flex; flex-direction:column; align-items:center; padding:16px; }
+        canvas { background:#222; border:2px solid #333; }
+        #status { margin:8px 0; color:#ffd700; }
+        #logs { width:80%; max-height:120px; overflow:auto; font-family:monospace; font-size:12px; background:#0f0f0f; padding:8px; border-radius:4px; }
+    </style>
+</head>
+<body>
+    <h1>Gyro Paddle</h1>
+    <div id="status">Connecting...</div>
+    <div id="scoreboard" style="display:flex; gap:16px; align-items:center; margin-bottom:6px;">
+        <div style="color:#4ea1ff">Blue: <span id="scoreBlue">0</span></div>
+        <div style="color:#ff6b6b">Red: <span id="scoreRed">0</span></div>
+    </div>
+    <canvas id="canvas" width="800" height="400"></canvas>
+    <div id="logs"></div>
+
+    <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const logs = document.getElementById('logs');
+
+    // Paddles
+    const paddleWidth = 120;
+    const paddleHeight = 16;
+    // blue paddle (bottom)
+    let blueX = canvas.width/2 - paddleWidth/2;
+    // red paddle (top)
+    let redX = canvas.width/2 - paddleWidth/2;
+
+    // Ball
+    const ballRadius = 10;
+    let ballX = canvas.width/2;
+    let ballY = canvas.height/2;
+    let ballSpeedX = 3;
+    let ballSpeedY = -3;
+
+    // Smoothing (per-role)
+    const smoothWindow = 12;
+    let blueBetaHistory = [];
+    let redBetaHistory = [];
+
+    function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+    // red paddle (top)
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillRect(redX, 4, paddleWidth, paddleHeight);
+    // blue paddle (bottom)
+    ctx.fillStyle = '#4ea1ff';
+    ctx.fillRect(blueX, canvas.height - paddleHeight - 4, paddleWidth, paddleHeight);
+        // ball
+        ctx.beginPath(); ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2); ctx.fillStyle='#eee'; ctx.fill(); ctx.closePath();
+    }
+
+    function updateBall() {
+        ballX += ballSpeedX; ballY += ballSpeedY;
+        // horizontal wall bounce
+        if (ballX - ballRadius < 0 || ballX + ballRadius > canvas.width) ballSpeedX = -ballSpeedX;
+
+        // paddle collisions
+        let redHit = false;
+        // paddle collision - bottom (blue)
+        if (ballY + ballRadius > canvas.height - paddleHeight - 4 && ballX > blueX && ballX < blueX + paddleWidth) {
+            ballSpeedY = -Math.abs(ballSpeedY);
+            const hit = (ballX - blueX)/paddleWidth - 0.5; // -0.5..0.5
+            ballSpeedX += hit*2;
+        }
+        // paddle collision - top (red)
+        if (ballY - ballRadius < paddleHeight + 4 && ballX > redX && ballX < redX + paddleWidth) {
+            ballSpeedY = Math.abs(ballSpeedY);
+            const hit = (ballX - redX)/paddleWidth - 0.5;
+            ballSpeedX += hit*2;
+            redHit = true;
+        }
+
+        // misses: bottom miss -> point to red
+        if (ballY - ballRadius > canvas.height) {
+            redScore += 1;
+            updateScoreUI();
+            resetBall();
+            appendLog('Blue missed - point to Red');
+        }
+        // top miss (red missed): only reset if ball passed the top and red did not hit it -> point to blue
+        if (ballY - ballRadius < 0 && !redHit) {
+            blueScore += 1;
+            updateScoreUI();
+            resetBall();
+            appendLog('Red missed - point to Blue');
+        }
+    }
+
+    function appendLog(msg) {
+        if (!logs) return;
+        const t = new Date().toLocaleTimeString();
+        logs.textContent = `${t} ${msg}\n` + logs.textContent;
+        const lines = logs.textContent.split('\n');
+        if (lines.length > 80) logs.textContent = lines.slice(0,80).join('\n');
+    }
+
+    function gameLoop() {
+        updateBall();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resetBall() {
+        ballX = canvas.width/2;
+        ballY = canvas.height/2;
+        ballSpeedX = 3*(Math.random()>0.5?1:-1);
+        // randomize vertical direction: up or down
+        ballSpeedY = (Math.random() > 0.5) ? -3 : 3;
+    }
+
+    // Update paddle position from beta per role
+    function updatePaddle(beta, role='blue') {
+        if (beta === undefined || beta === null) return;
+        const scale = 0.8;
+        const alpha = 0.12;
+        if (role === 'blue') {
+            blueBetaHistory.push(beta);
+            if (blueBetaHistory.length > smoothWindow) blueBetaHistory.shift();
+            const avg = blueBetaHistory.reduce((a,b)=>a+b,0)/blueBetaHistory.length;
+            const clamped = Math.max(-90, Math.min(90, avg*scale));
+            const norm = (clamped + 90) / 180; // 0..1
+            const target = norm * (canvas.width - paddleWidth);
+            blueX = blueX*(1-alpha) + target*alpha;
+            blueX = Math.max(0, Math.min(blueX, canvas.width - paddleWidth));
+        } else if (role === 'red') {
+            redBetaHistory.push(beta);
+            if (redBetaHistory.length > smoothWindow) redBetaHistory.shift();
+            const avg = redBetaHistory.reduce((a,b)=>a+b,0)/redBetaHistory.length;
+            const clamped = Math.max(-90, Math.min(90, avg*scale));
+            const norm = (clamped + 90) / 180; // 0..1
+            const target = norm * (canvas.width - paddleWidth);
+            redX = redX*(1-alpha) + target*alpha;
+            redX = Math.max(0, Math.min(redX, canvas.width - paddleWidth));
+        }
+    }
+
+    // WebSocket: fetch endpoint then connect
+    let ws = null;
+    let wsUrl = null;
+    // Scores
+    let blueScore = 0;
+    let redScore = 0;
+    const scoreBlueEl = document.getElementById('scoreBlue');
+    const scoreRedEl = document.getElementById('scoreRed');
+
+    function updateScoreUI() {
+        if (scoreBlueEl) scoreBlueEl.textContent = String(blueScore);
+        if (scoreRedEl) scoreRedEl.textContent = String(redScore);
+    }
+
+    // initialize scoreboard display
+    updateScoreUI();
+
+    fetch('/api/token').then(r=>{ if(!r.ok) throw new Error('no token'); return r.json(); }).then(data=>{
+        // Prefer explicit ws_url from server; otherwise build one for this host.
+        const token = data.token;
+        if (data.ws_url) {
+            // if server provided full ws_url, use it and append token if not present
+            wsUrl = data.ws_url.includes('?') ? data.ws_url + '&token=' + encodeURIComponent(token) : data.ws_url + '?token=' + encodeURIComponent(token);
+        } else {
+            const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+            wsUrl = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+        }
+        status.textContent = 'Ready — connecting...';
+        connect();
+    }).catch(e=>{
+        status.textContent = 'No ws info (is server running?)';
+        appendLog('Cannot fetch /api/token');
+    });
+
+    function connect() {
+        if (!wsUrl) return;
+        try {
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => { status.textContent = 'Connected'; };
+            ws.onmessage = (ev) => {
+                try {
+                    const d = JSON.parse(ev.data);
+                    if (!d) return;
+                    const msgRole = d.role || 'blue';
+                    if (d.beta !== undefined) updatePaddle(d.beta, msgRole);
+                } catch(e) { /* ignore parse errors */ }
+            };
+            ws.onclose = () => { status.textContent = 'Disconnected'; /* do not log errors */ setTimeout(connect,3000); };
+            ws.onerror = () => { status.textContent = 'WS error'; /* suppressed error logs */ };
+        } catch(e) {
+            status.textContent = 'WS failed';
+        }
+    }
+
+    // start
+    gameLoop();
+    </script>
+</body>
+</html>

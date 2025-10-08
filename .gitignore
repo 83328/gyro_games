@@ -1,0 +1,27 @@
+# Ignore Python virtual environments
+venv/
+
+# Ignore macOS system files
+.DS_Store
+
+# Ignore Python bytecode
+__pycache__/
+*.py[cod]
+
+# Ignore log files
+*.log
+
+# Ignore environment files
+.env
+.env.*
+
+# Ignore editor/project files
+.vscode/
+.idea/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Ignore node modules (if any JS)
+node_modules/
