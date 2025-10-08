@@ -52,7 +52,16 @@ async def websocket_handler(request):
 def create_app(static_dir: str):
     app = web.Application()
     app.router.add_get('/ws', websocket_handler)
-    app.router.add_static('/', path=static_dir, show_index=True)
+    # Serve index.html at root explicitly and disable directory listings
+    async def index_handler(request):
+        index_path = os.path.join(static_dir, 'index.html')
+        if os.path.exists(index_path):
+            return web.FileResponse(index_path)
+        return web.Response(status=404, text='Not found')
+
+    app.router.add_get('/', index_handler)
+    # mount static files but disable directory index listing for security/UX
+    app.router.add_static('/', path=static_dir, show_index=False)
 
     # Add API endpoint to serve token
     async def token_handler(request):
