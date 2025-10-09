@@ -3,7 +3,7 @@
 
 Lightweight local demo that uses phones as motion controllers and a small Python aiohttp server to broadcast motion events to browser game pages. The idea behind this project is to see how old phones can be repurposed as motion controllers for simple local multiplayer games, without requiring any app installation.
 
-Features
+## Features
 - Phone streamer page (`/gyro.html`) — streams DeviceMotion / DeviceOrientation and acceleration to the server via WebSocket.
 - Several game pages under `static/` that consume streamed events:
 	- `maze.html` — grid-maze runner (2–4 players, corner starts/goals)
@@ -56,20 +56,18 @@ Controls & calibration
 - `maze.html` contains a small "Calibrate" button (saves neutral orientation to localStorage). Calibration persists across reloads.
 - `lander.html` and other game pages include small HUDs and invert toggles to adjust device sign conventions per phone.
 
-Development notes
+![Maze demo](media/images/maze.png)
+
+## Development notes
 - The server is a minimal aiohttp app in `server.py`. It serves files from `static/` and implements `/api/token` and `/ws` endpoints.
 - If you get a ModuleNotFoundError for `dotenv`, install `python-dotenv` or remove the `.env` usage in `server.py`.
 
-Troubleshooting
+## Troubleshooting
 - WebSocket fails to connect: check server console for handshake logs. If you set `GYRO_TOKEN` then the client must pass the same token (see `/api/token` response). If you see malformed ws URLs like `wss://https//...` check any `WS_URL` you configured.
 - iOS motion permission: Safari requires a user gesture to request motion/orientation permission. Open `/gyro.html` and tap Start; if the page doesn't prompt, check the Safari settings and ensure HTTPS/localhost and a user gesture.
 - Virtualenv pip wrapper broken: recreate the venv using `python3 -m venv .venv` and reinstall packages with `python -m pip install ...`.
 
-Extending
-- Add new game pages by creating static HTML/JS that listens to the same WebSocket and implements role-based input handling.
-- Persist per-player preferences (invert toggles, sensitivity) in localStorage to remember settings across sessions.
-
-License & credits
+## License & credits
 - This project is released under a non-commercial license: Creative Commons
 	Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
 
