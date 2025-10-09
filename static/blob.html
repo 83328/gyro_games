@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Blob Eaters</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;display:flex;flex-direction:column;align-items:center;background:#0b0b12;color:#eef}
+    canvas{background:linear-gradient(#022,#001);border:2px solid #224;margin:12px}
+    .hud{display:flex;gap:12px;align-items:center}
+    .role{padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.03)}
+  </style>
+</head>
+<body>
+  <h2 style="margin:12px 0 0 0">Blob Eaters</h2>
+  <div class="hud">
+    <div class="role">Blue</div><div class="role">Red</div><div class="role">Yellow</div><div class="role">Green</div>
+    <button id="restart" style="margin-left:14px">Restart</button>
+    <div id="status" style="margin-left:8px">Connecting...</div>
+  </div>
+  <canvas id="c" width="900" height="600"></canvas>
+<script>
+const CANVAS = document.getElementById('c');
+const ctx = CANVAS.getContext('2d');
+const statusEl = document.getElementById('status');
+const restartBtn = document.getElementById('restart');
+
+// Game constants
+const ROLES = ['blue','red','yellow','green'];
+const COLORS = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+const WIDTH = CANVAS.width, HEIGHT = CANVAS.height;
+
+// convert between area and radius
+function areaToR(a){ return Math.sqrt(a / Math.PI); }
+function rToArea(r){ return Math.PI * r * r; }
+
+// player state
+const players = {};
+for(const r of ROLES){ players[r] = {x:Math.random()*WIDTH, y:Math.random()*HEIGHT, vx:0, vy:0, area: rToArea(18), displayArea: rToArea(18), lastInput:0}; }
+
+// neutral blobs (not player controlled)
+const NEUTRAL_COUNT = 10;
+const neutrals = [];
+function initNeutrals(){
+  neutrals.length = 0;
+  for(let i=0;i<NEUTRAL_COUNT;i++){
+    const baseR = 6 + Math.random()*12; // radius
+    const a = rToArea(baseR);
+    neutrals.push({x:Math.random()*WIDTH, y:Math.random()*HEIGHT, vx:(Math.random()-0.5)*40, vy:(Math.random()-0.5)*40, area: a, displayArea: a, wanderT: Math.random()*3});
+  }
+}
+initNeutrals();
+
+// inputs from websocket per role
+const inputs = {blue:null, red:null, yellow:null, green:null};
+
+// spawn positions spread out
+function resetGame(){
+  players.blue.x = WIDTH*0.1; players.blue.y = HEIGHT*0.9; players.blue.vx=0; players.blue.vy=0; players.blue.area=rToArea(20); players.blue.displayArea = players.blue.area;
+  players.red.x  = WIDTH*0.9; players.red.y  = HEIGHT*0.1; players.red.vx=0; players.red.vy=0; players.red.area=rToArea(20); players.red.displayArea = players.red.area;
+  players.yellow.x = WIDTH*0.9; players.yellow.y = HEIGHT*0.9; players.yellow.vx=0; players.yellow.vy=0; players.yellow.area=rToArea(18); players.yellow.displayArea = players.yellow.area;
+  players.green.x  = WIDTH*0.1; players.green.y  = HEIGHT*0.1; players.green.vx=0; players.green.vy=0; players.green.area=rToArea(16); players.green.displayArea = players.green.area;
+  initNeutrals();
+}
+resetGame();
+
+// websocket hookup
+let ws = null;
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token = data.token;
+  const proto = (location.protocol==='https:')?'wss':'ws';
+  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = ()=>{ statusEl.textContent = 'Connected'; };
+  ws.onmessage = (ev)=>{
+    try{
+      const d = JSON.parse(ev.data);
+      if(!d || !d.role) return;
+      // store orientation if provided, else integrate beta/gamma
+      const t = Date.now();
+      if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, ts:0};
+      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
+        inputs[d.role].rawBeta = d.orientBeta; inputs[d.role].rawGamma = d.orientGamma; inputs[d.role].ts = t;
+      } else if(d.beta!==undefined && d.gamma!==undefined){
+        // integrate small amount
+        inputs[d.role].rawBeta = (inputs[d.role].rawBeta || 0) + (d.beta||0)*0.02;
+        inputs[d.role].rawGamma = (inputs[d.role].rawGamma || 0) + (d.gamma||0)*0.02;
+        inputs[d.role].ts = t;
+      }
+    }catch(e){}
+  };
+  ws.onclose = ()=>{ statusEl.textContent = 'Disconnected'; };
+}).catch(e=>{ statusEl.textContent = 'No backend'; });
+
+// keyboard fallback for testing
+window.addEventListener('keydown', (ev)=>{
+  // WASD control blue
+  if(ev.key==='w') inputs.blue = inputs.blue || {}; inputs.blue.rawBeta = -20; inputs.blue.ts = Date.now();
+  if(ev.key==='s') inputs.blue.rawBeta = 20; inputs.blue.ts = Date.now();
+  if(ev.key==='a') inputs.blue.rawGamma = -20; inputs.blue.ts = Date.now();
+  if(ev.key==='d') inputs.blue.rawGamma = 20; inputs.blue.ts = Date.now();
+});
+
+// AI constants
+const INPUT_TIMEOUT = 1200; // ms before AI takes over
+const MAX_SPEED = 160; // px/s when large this is scaled
+
+function aiStep(role, dt){
+  // simple behavior: pick nearest other blob as target
+  const me = players[role];
+  let nearest = null, nd = 1e9;
+  for(const r of ROLES){ if(r===role) continue; const p = players[r]; const d = (p.x-me.x)*(p.x-me.x)+(p.y-me.y)*(p.y-me.y); if(d<nd){ nd=d; nearest=r; }}
+  if(!nearest) return {beta:0,gamma:0};
+  const target = players[nearest];
+  const dx = target.x - me.x, dy = target.y - me.y; const dist = Math.hypot(dx,dy)||1;
+  // if target is smaller, seek; else flee
+  const seek = (me.area > target.area*1.05);
+  const desiredV = Math.min(MAX_SPEED, 80 + 0.5*(Math.sqrt(me.area))); // scale a bit
+  const vx = (dx/dist) * (seek? desiredV : -desiredV);
+  const vy = (dy/dist) * (seek? desiredV : -desiredV);
+  return {vx, vy};
+}
+
+function mapInputToVelocity(role){
+  // map inputs rawBeta/rawGamma to velocity vector
+  const inp = inputs[role];
+  if(!inp) return {vx:0, vy:0};
+  const beta = inp.rawBeta || 0; const gamma = inp.rawGamma || 0;
+  // beta: forward/back -> y, gamma: left/right -> x. Use simple scaling
+  const REF = 35;
+  const nx = Math.max(-1, Math.min(1, (gamma/REF)));
+  // invert vertical mapping: tilt forward produces negative beta on some devices,
+  // flip sign here to invert up/down controls as requested
+  const ny = Math.max(-1, Math.min(1, -(beta/REF)));
+  const speed = 140; // base
+  return {vx: nx * speed, vy: ny * speed};
+}
+
+function step(dt){
+  // dt in seconds
+  // update each role
+  for(const r of ROLES){
+    const p = players[r];
+    const now = Date.now();
+    const hasInput = inputs[r] && (now - inputs[r].ts) < INPUT_TIMEOUT;
+    if(hasInput){
+      const targ = mapInputToVelocity(r);
+      // smooth toward target
+      p.vx += (targ.vx - p.vx) * Math.min(1, dt*6);
+      p.vy += (targ.vy - p.vy) * Math.min(1, dt*6);
+    } else {
+      // AI
+      const ai = aiStep(r, dt);
+      p.vx += (ai.vx - p.vx) * Math.min(1, dt*2);
+      p.vy += (ai.vy - p.vy) * Math.min(1, dt*2);
+    }
+    // move
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    // keep inside bounds with bounce
+    const rad = areaToR(p.area);
+    if(p.x - rad < 0){ p.x = rad; p.vx *= -0.6; }
+    if(p.x + rad > WIDTH){ p.x = WIDTH - rad; p.vx *= -0.6; }
+    if(p.y - rad < 0){ p.y = rad; p.vy *= -0.6; }
+    if(p.y + rad > HEIGHT){ p.y = HEIGHT - rad; p.vy *= -0.6; }
+    // smooth displayed area for animation
+    p.displayArea += (p.area - p.displayArea) * Math.min(1, dt*6);
+  }
+  // update neutrals
+  for(const n of neutrals){
+    // wander
+    n.wanderT -= dt;
+    if(n.wanderT <= 0){ n.wanderT = 1 + Math.random()*3; n.vx += (Math.random()-0.5)*80; n.vy += (Math.random()-0.5)*80; }
+    n.x += n.vx * dt; n.y += n.vy * dt;
+    const rad = areaToR(n.area);
+    if(n.x - rad < 0){ n.x = rad; n.vx *= -0.6; }
+    if(n.x + rad > WIDTH){ n.x = WIDTH - rad; n.vx *= -0.6; }
+    if(n.y - rad < 0){ n.y = rad; n.vy *= -0.6; }
+    if(n.y + rad > HEIGHT){ n.y = HEIGHT - rad; n.vy *= -0.6; }
+    n.displayArea += (n.area - n.displayArea) * Math.min(1, dt*4);
+  }
+  // collisions and eating
+  // combine players and neutrals into an array for collision checks
+  const all = ROLES.map(r=>({role:r, obj:players[r]})).concat(neutrals.map((n,i)=>({role:'neutral'+i, obj:n})));
+  for(let i=0;i<all.length;i++){
+    for(let j=i+1;j<all.length;j++){
+      const A = all[i].obj, B = all[j].obj;
+      const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx,dy);
+      const rA = areaToR(A.area), rB = areaToR(B.area);
+      if(d < rA + rB){
+        // overlap: compute transfer
+        if(A.area > B.area * 1.02){
+          const transfer = Math.min(B.area*0.35, A.area*0.12);
+          A.area += transfer; B.area = Math.max(8, B.area - transfer);
+          const push = (rA + rB - d) * 0.5 || 0.1;
+          const nx = dx/d, ny = dy/d;
+          A.x -= nx * push; A.y -= ny * push; B.x += nx * push; B.y += ny * push;
+        } else if(B.area > A.area * 1.02){
+          const transfer = Math.min(A.area*0.35, B.area*0.12);
+          B.area += transfer; A.area = Math.max(8, A.area - transfer);
+          const push = (rA + rB - d) * 0.5 || 0.1;
+          const nx = dx/d, ny = dy/d;
+          A.x -= nx * push; A.y -= ny * push; B.x += nx * push; B.y += ny * push;
+        } else {
+          // similar sizes -> simple bounce
+          const nx = dx/d, ny = dy/d;
+          const relx = (B.vx - A.vx), rely = (B.vy - A.vy);
+          const sep = (relx*nx + rely*ny);
+          A.vx -= nx * sep * 0.3; A.vy -= ny * sep * 0.3;
+          B.vx += nx * sep * 0.3; B.vy += ny * sep * 0.3;
+        }
+      }
+    }
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,WIDTH,HEIGHT);
+  // draw players with size and label
+  for(const r of ROLES){
+    const p = players[r]; const rad = areaToR(p.displayArea);
+    // glow
+    ctx.beginPath(); ctx.fillStyle = COLORS[r]; ctx.globalAlpha = 0.08; ctx.arc(p.x,p.y,rad*1.6,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+    // blob
+    ctx.beginPath(); ctx.fillStyle = COLORS[r]; ctx.arc(p.x,p.y,rad,0,Math.PI*2); ctx.fill();
+    // outline
+    ctx.lineWidth = 2; ctx.strokeStyle = '#001'; ctx.stroke();
+    // label
+    ctx.fillStyle = '#001'; ctx.font = '12px monospace'; ctx.fillText(`${r} ${Math.round(p.area)}`, p.x - rad, p.y - rad - 6);
+  }
+  // draw neutrals
+  for(const n of neutrals){ const rad = areaToR(n.displayArea); ctx.beginPath(); ctx.fillStyle = '#bdbdbd'; ctx.globalAlpha = 0.12; ctx.arc(n.x,n.y,rad*1.4,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; ctx.beginPath(); ctx.fillStyle = '#dcdcdc'; ctx.arc(n.x,n.y,rad,0,Math.PI*2); ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#111'; ctx.stroke(); }
+}
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(60, now - last)/1000; last = now;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+restartBtn.addEventListener('click', ()=>{ resetGame(); statusEl.textContent='Restarted'; });
+
+</script>
+</body>
+</html>
