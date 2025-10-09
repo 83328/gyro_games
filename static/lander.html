@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Moon Lander — Gyro Games</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px}
+    canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px}
+    .hud{display:flex;gap:12px;align-items:center}
+    button{padding:.4rem .8rem;border-radius:6px;border:none;background:#1f6feb;color:white}
+    .score{font-size:14px}
+  </style>
+</head>
+<body>
+  <h1>Moon Lander</h1>
+  <div class="hud">
+    <div class="score">Blue: <span id="bScore">0</span></div>
+    <div class="score">Red: <span id="rScore">0</span></div>
+    <button id="restart">Restart</button>
+    <div style="margin-left:12px">Tip: open <code>/gyro.html</code> on your phone and pick a role.</div>
+  </div>
+  <canvas id="c" width="700" height="420"></canvas>
+  <div id="msg" style="margin-top:8px;color:#cfe">Connecting...</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const msg = document.getElementById('msg');
+const bScoreEl = document.getElementById('bScore');
+const rScoreEl = document.getElementById('rScore');
+const restartBtn = document.getElementById('restart');
+
+// Game settings — tuned to be easier to control
+const GRAVITY = 10; // reduced gravity for easier hovering
+const THRUST_POWER = 40; // thrust
+const ROT_TORQUE = 1.4; // gentler rotation torque for smoother turning
+const FUEL_CONSUMPTION = 5.0; // consumption
+const INPUT_SMOOTH = 0.12; // smoothing factor for incoming beta/gamma
+const AUTO_LEVEL_FACTOR = 1.6; // auto-level assist strength
+
+// ground generation
+const W = canvas.width, H = canvas.height;
+let ground = [];
+let pads = [];
+function genGround(){
+  ground = [];
+  const segments = 14;
+  for(let i=0;i<=segments;i++){
+    const x = i*(W/segments);
+    const y = H - 40 - Math.round(Math.sin(i*1.2)*20) - Math.random()*14;
+    ground.push({x,y});
+  }
+  // landing pads (two pads for two players)
+  pads = [];
+  const padW = 60;
+  const pad1X = Math.floor(W*0.2);
+  const pad2X = Math.floor(W*0.75);
+  pads.push({x:pad1X, y:groundYAt(pad1X), w:padW});
+  pads.push({x:pad2X, y:groundYAt(pad2X), w:padW});
+}
+function groundYAt(x){
+  // linear interpolate between points
+  for(let i=0;i<ground.length-1;i++){
+    const a=ground[i], b=ground[i+1];
+    if(x>=a.x && x<=b.x){
+      const t=(x-a.x)/(b.x-a.x); return a.y*(1-t)+b.y*t;
+    }
+  }
+  return H-20;
+}
+
+// players state
+const players = {
+  blue: {x: W*0.25, y: 60, vx:0, vy:0, angle:0, av:0, fuel:100, landed:false, crashed:false, score:0},
+  red:  {x: W*0.75, y: 60, vx:0, vy:0, angle:0, av:0, fuel:100, landed:false, crashed:false, score:0}
+};
+
+// input from websocket (per role): keep raw and smoothed values
+const inputs = { blue: {rawBeta:0, rawGamma:0, beta:0, gamma:0}, red:{rawBeta:0, rawGamma:0, beta:0, gamma:0} };
+
+function resetRound(){
+  genGround();
+  players.blue.x = W*0.25; players.blue.y = 60; players.blue.vx=0; players.blue.vy=0; players.blue.angle=0; players.blue.av=0; players.blue.fuel=100; players.blue.landed=false; players.blue.crashed=false;
+  players.red.x = W*0.75; players.red.y = 60; players.red.vx=0; players.red.vy=0; players.red.angle=0; players.red.av=0; players.red.fuel=100; players.red.landed=false; players.red.crashed=false;
+}
+
+resetRound();
+
+// draw
+function drawGround(){
+  ctx.fillStyle='#223'; ctx.beginPath(); ctx.moveTo(0,H);
+  for(const p of ground) ctx.lineTo(p.x,p.y);
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+  // pads
+  for(const [i,p] of pads.entries()){
+    ctx.fillStyle = i===0? '#4ea1ff' : '#ff6b6b';
+    ctx.fillRect(p.x - p.w/2, p.y-4, p.w, 6);
+    ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x - p.w/2, p.y-4, p.w, 6);
+  }
+}
+
+function drawLander(pl, color){
+  ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(pl.angle);
+  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
+  // flame
+  if(pl.thrust>0 && pl.fuel>0){ ctx.fillStyle='orange'; ctx.beginPath(); ctx.moveTo(-6,10); ctx.lineTo(0,10+Math.random()*8*pl.thrust); ctx.lineTo(6,10); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawHUD(){
+  ctx.fillStyle='white'; ctx.font='12px monospace';
+  ctx.fillText(`Blue fuel:${players.blue.fuel.toFixed(0)} vx:${players.blue.vx.toFixed(1)} vy:${players.blue.vy.toFixed(1)} ang:${(players.blue.angle*57.3).toFixed(0)}`, 8,16);
+  ctx.fillText(`Red  fuel:${players.red.fuel.toFixed(0)} vx:${players.red.vx.toFixed(1)} vy:${players.red.vy.toFixed(1)} ang:${(players.red.angle*57.3).toFixed(0)}`, 8,34);
+  // fuel bars
+  const fw = 120, fh = 8;
+  ctx.fillStyle='#333'; ctx.fillRect(W - fw - 10, 8, fw, fh);
+  ctx.fillStyle='#4ea1ff'; ctx.fillRect(W - fw - 10, 8, fw * (players.blue.fuel/100), fh);
+  ctx.fillStyle='#333'; ctx.fillRect(W - fw - 10, 24, fw, fh);
+  ctx.fillStyle='#ff6b6b'; ctx.fillRect(W - fw - 10, 24, fw * (players.red.fuel/100), fh);
+}
+
+// physics and rules
+function step(dt){
+  for(const role of ['blue','red']){
+    const p = players[role];
+    if(p.landed || p.crashed) { p.thrust = 0; continue; }
+  // map inputs: use beta for thrust (tilt up => thrust), gamma for rotation
+  if(!inputs[role]) inputs[role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+  // smooth incoming raw inputs into working values
+  inputs[role].beta = inputs[role].beta * (1 - INPUT_SMOOTH) + (inputs[role].rawBeta || 0) * INPUT_SMOOTH;
+  inputs[role].gamma = inputs[role].gamma * (1 - INPUT_SMOOTH) + (inputs[role].rawGamma || 0) * INPUT_SMOOTH;
+  const beta = inputs[role].beta || 0; const gamma = inputs[role].gamma || 0;
+  // thrust mapping: positive beta -> thrust (tilt up increases thrust)
+  let thrust = Math.max(0, Math.min(1, (beta)/35));
+    // small deadzone
+    if(Math.abs(thrust) < 0.03) thrust = 0;
+    // rotation from gamma: left/right tilt -> angular acceleration sign
+    const rotInput = Math.max(-1, Math.min(1, (gamma || 0)/30));
+
+    // consume fuel
+    if(thrust>0 && p.fuel>0){ p.fuel = Math.max(0, p.fuel - FUEL_CONSUMPTION * thrust * dt); }
+    if(p.fuel<=0) thrust = 0;
+
+    // thrust vector in ship's local -y direction
+    const ax = Math.sin(p.angle) * (thrust) * THRUST_POWER;
+    const ay = Math.cos(p.angle) * (-thrust) * THRUST_POWER;
+    // apply gravity
+    p.vx += ax * dt;
+    p.vy += (ay + GRAVITY) * dt;
+  // angular acceleration
+  p.av += rotInput * ROT_TORQUE * dt;
+  // auto-level assist nudges angular acceleration toward 0 when near upright
+  p.av += (-p.angle) * AUTO_LEVEL_FACTOR * dt;
+  p.angle += p.av * dt;
+    // damping angular velocity slightly
+    p.av *= 0.995;
+    // position
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+  p.thrust = thrust;
+
+    // ground collision — compare using the lander's bottom point so it rests on top of pads
+    const gy = groundYAt(p.x);
+    // lander bottom is at p.y + 10 (drawn with base at y=10), pad top is at gy - 4
+    // so contact when p.y >= gy - 14
+    if(p.y >= gy - 14){
+      // landed surface contact
+      // check if inside pad and gentle landing
+      const padIndex = pads.findIndex(pd => p.x >= pd.x - pd.w/2 && p.x <= pd.x + pd.w/2);
+      const safeV = Math.abs(p.vy) < 40; // px/s
+      const upright = Math.abs(p.angle) < 0.35; // ~20 deg
+      if(padIndex !== -1 && safeV && upright){
+        p.landed = true; p.y = gy - 14; p.vx = 0; p.vy = 0; p.av = 0;
+        p.score += 1; p.score = p.score || 0;
+        players[role].score = p.score;
+        if(role==='blue') bScoreEl.textContent = p.score; else rScoreEl.textContent = p.score;
+        msg.textContent = `${role} landed successfully!`;
+      } else {
+        p.crashed = true; p.y = gy - 14; p.vx = 0; p.vy = 0; p.av = 0;
+        msg.textContent = `${role} crashed...`;
+      }
+    }
+    // keep in bounds
+    p.x = Math.max(10, Math.min(W-10, p.x));
+    p.y = Math.max(10, Math.min(H-10, p.y));
+  }
+}
+
+// websocket hookup — reuse /api/token
+let ws = null;
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token = data.token;
+  const proto = (location.protocol==='https:')?'wss':'ws';
+  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = ()=>{ msg.textContent='Connected'; };
+  ws.onmessage = (ev)=>{
+    try{
+      const d = JSON.parse(ev.data);
+      if(!d || d.role==null) return;
+      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
+        if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+        inputs[d.role].rawBeta = d.orientBeta;
+        inputs[d.role].rawGamma = d.orientGamma;
+      } else if(d.beta!==undefined && d.gamma!==undefined){
+        if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+        inputs[d.role].rawBeta += (d.beta||0) * 0.02;
+        inputs[d.role].rawGamma += (d.gamma||0) * 0.02;
+      }
+    }catch(e){}
+  };
+  ws.onclose = ()=>{ msg.textContent='Disconnected'; };
+}).catch(e=>{ msg.textContent='No backend /api/token'; });
+
+// keyboard fallback for local testing
+window.addEventListener('keydown', (ev)=>{
+  // WASD for blue, arrow keys for red
+  const step = 6;
+  if(ev.key==='w') inputs.blue.rawBeta = -20;
+  if(ev.key==='s') inputs.blue.rawBeta = 20;
+  if(ev.key==='a') inputs.blue.rawGamma = -20;
+  if(ev.key==='d') inputs.blue.rawGamma = 20;
+  if(ev.key==='ArrowUp') inputs.red.rawBeta = -20;
+  if(ev.key==='ArrowDown') inputs.red.rawBeta = 20;
+  if(ev.key==='ArrowLeft') inputs.red.rawGamma = -20;
+  if(ev.key==='ArrowRight') inputs.red.rawGamma = 20;
+});
+window.addEventListener('keyup', (ev)=>{
+  if(['w','s','a','d'].includes(ev.key)) { inputs.blue.rawBeta = 0; inputs.blue.rawGamma = 0; }
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.key)) { inputs.red.rawBeta = 0; inputs.red.rawGamma = 0; }
+});
+
+// animation
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(60, now-last)/1000; last = now;
+  // physics
+  step(dt);
+  // draw
+  ctx.clearRect(0,0,W,H);
+  drawGround();
+  drawLander(players.blue, '#4ea1ff');
+  drawLander(players.red, '#ff6b6b');
+  drawHUD();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+restartBtn.addEventListener('click', ()=>{ resetRound(); msg.textContent='Round reset'; bScoreEl.textContent = players.blue.score || 0; rScoreEl.textContent = players.red.score || 0; });
+
+</script>
+</body>
+</html>
