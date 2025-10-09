@@ -70,4 +70,24 @@ Extending
 - Persist per-player preferences (invert toggles, sensitivity) in localStorage to remember settings across sessions.
 
 License & credits
-- Small personal project. Feel free to reuse the ideas; if you distribute code derived from this project please include attribution.
+- This project is released under a non-commercial license: Creative Commons
+	Attribution-NonCommercial 4.0 International (CC BY-NC 4.0).
+
+	In short: you are free to copy, modify, and redistribute the source code and
+	documentation for non-commercial purposes, provided you give proper attribution
+	to the original author. Any distribution (including derivative works) must be
+	for non-commercial use only. The full license text is available from the
+	Creative Commons website and a copy or reference is provided in the `LICENSE` file.
+
+	Key points:
+	- You may use, modify and redistribute this project for non-commercial purposes.
+	- You must provide attribution to the original project when redistributing.
+	- Commercial use (selling, licensing, or redistributing for direct commercial gain)
+		is not permitted under this license. For commercial use please contact the project owner
+		to arrange a separate commercial license.
+	- The software is provided WITHOUT ANY WARRANTY; without even the implied warranty of
+		MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the full license for details.
+
+	If you want to use this code commercially or include it in a project that will be
+	distributed commercially, please contact the project owner to discuss a commercial
+	licensing arrangement.
