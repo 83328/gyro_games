@@ -14,7 +14,17 @@
 <body>
   <h1>Maze Runner</h1>
   <div id="info">Connecting...</div>
-  <div id="scores">Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span></div>
+  <div id="scores">
+    Players:
+    <select id="playerCount" style="margin:0 8px">
+      <option value="2">2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+    </select>
+    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
+    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  </div>
   <canvas id="c" width="600" height="600"></canvas>
 <script>
 const canvas = document.getElementById('c');
@@ -27,28 +37,21 @@ const sRed = document.getElementById('sRed');
 const ctrlContainer = document.createElement('div');
 ctrlContainer.style.margin = '8px';
 ctrlContainer.innerHTML = `
-  <label>Calibration: <button id="calibBtn">Calibrate</button> <button id="resetCalib">Reset</button></label>
-  &nbsp; Sens X: <input id="sensitivityX" type="range" min="0.4" max="3.0" step="0.1" value="1"> <span id="sensXVal">1.0</span>
-  &nbsp; Sens Y: <input id="sensitivityY" type="range" min="0.4" max="3.0" step="0.1" value="1"> <span id="sensYVal">1.0</span>
-  &nbsp; Deadzone: <input id="deadzone" type="range" min="0" max="8" step="0.5" value="1"> <span id="dzVal">1.0</span>
+  <label>Calibration: <button id="calibBtn">Calibrate</button></label>
 `;
 document.body.insertBefore(ctrlContainer, canvas.nextSibling);
 const calibBtn = document.getElementById('calibBtn');
-const resetCalibBtn = document.getElementById('resetCalib');
-const sensitivityX = document.getElementById('sensitivityX');
-const sensitivityY = document.getElementById('sensitivityY');
-const sensXVal = document.getElementById('sensXVal');
-const sensYVal = document.getElementById('sensYVal');
-const deadzoneEl = document.getElementById('deadzone');
-const dzVal = document.getElementById('dzVal');
+// sensitivity and deadzone are now fixed constants (no sliders)
+const DEFAULT_SENS_X = 1.0;
+const DEFAULT_SENS_Y = 1.0;
+const DEFAULT_DEADZONE = 1.0;
+// forward/back tilt mapping: currently non-inverted (tilting device forward increases canvas Y)
 
 let calibration = {beta:0, gamma:0, has:true};
 let useOrientation = true; // prefer orientation angles when present
 let orientationAvailable = false;
 
-sensitivityX.addEventListener('input', ()=>{ sensXVal.textContent = parseFloat(sensitivityX.value).toFixed(1); });
-sensitivityY.addEventListener('input', ()=>{ sensYVal.textContent = parseFloat(sensitivityY.value).toFixed(1); });
-deadzoneEl.addEventListener('input', ()=>{ dzVal.textContent = parseFloat(deadzoneEl.value).toFixed(1); });
+// removed slider listeners: using default constants
 calibBtn.addEventListener('click', ()=>{
   // capture current orientation as neutral
   if(lastDeviceOrientation){
@@ -61,11 +64,7 @@ calibBtn.addEventListener('click', ()=>{
     appendLog('No orientation available to calibrate');
   }
 });
-resetCalibBtn.addEventListener('click', ()=>{
-  calibration = {beta:0,gamma:0,has:false};
-  try{ localStorage.removeItem('gyro_maze_calib'); }catch(e){}
-  appendLog('Calibration reset');
-});
+// reset button removed — calibration can be overwritten by re-calibrating
 
 // Maze grid
 const COLS = 15, ROWS = 15;
@@ -78,6 +77,14 @@ let players = {
   red:  {x:COLS-1,y:0, px:0, py:0, vx:0, vy:0}
 };
 let scores = {blue:0, red:0};
+// optional players (created when playerCount >=3)
+players.yellow = {x: Math.floor(COLS/2), y: ROWS-1, px:0, py:0, vx:0, vy:0};
+players.green  = {x: Math.floor(COLS/2), y: 0, px:0, py:0, vx:0, vy:0};
+scores.yellow = 0; scores.green = 0;
+
+const playerCountEl = document.createElement('select');
+// we'll use the DOM select already added in HTML; wire it below
+let activeRoles = ['blue','red'];
 
 // store last orientation received from WS messages
 let lastDeviceOrientation = null;
@@ -128,15 +135,28 @@ function draw(){
       }
     }
   }
-  // draw goal squares
+  // draw goal squares (corners)
+  // Blue goal: top-right
   ctx.fillStyle='#0033aa'; ctx.fillRect((COLS-1)*cell.w,0,cell.w,cell.h);
+  // Red goal: bottom-left
   ctx.fillStyle='#aa0000'; ctx.fillRect(0,(ROWS-1)*cell.h,cell.w,cell.h);
+  // Yellow goal: top-left (opposite of yellow start at bottom-right)
+  if(activeRoles.includes('yellow')){ ctx.fillStyle='#ffd86b'; ctx.fillRect(0, 0, cell.w, cell.h); }
+  // Green goal: bottom-right (opposite of green start at top-left)
+  if(activeRoles.includes('green')){ ctx.fillStyle='#8fe58f'; ctx.fillRect((COLS-1)*cell.w, (ROWS-1)*cell.h, cell.w, cell.h); }
 
   // draw players as circles at pixel positions
   ctx.fillStyle='#4ea1ff';
   ctx.beginPath(); ctx.arc(players.blue.px, players.blue.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle='#ff6b6b';
   ctx.beginPath(); ctx.arc(players.red.px, players.red.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
+  // optional players
+  if(activeRoles.includes('yellow')){
+    ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(players.yellow.px, players.yellow.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
+  }
+  if(activeRoles.includes('green')){
+    ctx.fillStyle='#8fe58f'; ctx.beginPath(); ctx.arc(players.green.px, players.green.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
+  }
 }
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
@@ -150,13 +170,13 @@ function handleTilt(role, beta, gamma){
   // more intuitive mapping:
   // prefer orientation angles if present. beta: front/back tilt, gamma: left/right tilt.
   // apply calibration, deadzone, sensitivity and non-linear scaling for control.
-  const sensX = parseFloat(sensitivityX.value || 1);
-  const sensY = parseFloat(sensitivityY.value || 1);
-  const dead = parseFloat(deadzoneEl.value || 1);
+  const sensX = DEFAULT_SENS_X;
+  const sensY = DEFAULT_SENS_Y;
+  const dead = DEFAULT_DEADZONE;
   let b = beta, g = gamma;
   if(calibration.has){ b = b - calibration.beta; g = g - calibration.gamma; }
-  // invert vertical axis so tilting device up moves player up (negative canvas Y)
-  b = -b;
+  // forward/back mapping: do not invert beta here
+  b = b;
   // apply deadzone
   function applyDeadzone(v){ return Math.abs(v) < dead ? 0 : (v > 0 ? v - dead : v + dead); }
   b = applyDeadzone(b); g = applyDeadzone(g);
@@ -188,6 +208,8 @@ function checkGoal(role){
   const cx = Math.floor(p.px / cell.w), cy = Math.floor(p.py / cell.h);
   if(role==='blue' && cx===COLS-1 && cy===0){ scores.blue++; sBlue.textContent = scores.blue; appendLog('Blue scored!'); resetRound(); }
   if(role==='red' && cx===0 && cy===ROWS-1){ scores.red++; sRed.textContent = scores.red; appendLog('Red scored!'); resetRound(); }
+  if(role==='yellow' && activeRoles.includes('yellow') && cx===0 && cy===0){ scores.yellow++; document.getElementById('sYellow').textContent = scores.yellow; appendLog('Yellow scored!'); resetRound(); }
+  if(role==='green' && activeRoles.includes('green') && cx===COLS-1 && cy===ROWS-1){ scores.green++; document.getElementById('sGreen').textContent = scores.green; appendLog('Green scored!'); resetRound(); }
 }
 
 function appendLog(msg){
@@ -197,8 +219,15 @@ function appendLog(msg){
 function resetRound(){
   initMaze();
   // place players at cell centers
+  // corners: blue bottom-left, red top-right, yellow bottom-right, green top-left
   players.blue = {x:0,y:ROWS-1, px: (0+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
   players.red  = {x:COLS-1,y:0, px: (COLS-1+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
+  if(activeRoles.includes('yellow')){
+    players.yellow = {x:COLS-1,y:ROWS-1, px: (COLS-1+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
+  }
+  if(activeRoles.includes('green')){
+    players.green = {x:0,y:0, px: (0+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
+  }
   draw();
 }
 
@@ -215,6 +244,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
         // if orientation angles are provided, prefer them (more stable for tilt)
+        if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
         if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
           orientationAvailable = true;
           lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
@@ -250,6 +280,24 @@ initMaze();
 players.blue.px = (0+0.5)*cell.w; players.blue.py = (ROWS-1+0.5)*cell.h;
 players.red.px = (COLS-1+0.5)*cell.w; players.red.py = (0+0.5)*cell.h;
 
+// player count selector handling
+const playerCount = document.getElementById('playerCount');
+const yellowScoreContainer = document.getElementById('yellowScoreContainer');
+const greenScoreContainer = document.getElementById('greenScoreContainer');
+function updateActiveRoles(){
+  const n = parseInt(playerCount.value, 10) || 2;
+  activeRoles = ['blue','red'];
+  if(n >= 3){ activeRoles.push('yellow'); yellowScoreContainer.style.display = ''; }
+  else { yellowScoreContainer.style.display = 'none'; }
+  if(n >= 4){ activeRoles.push('green'); greenScoreContainer.style.display = ''; }
+  else { greenScoreContainer.style.display = 'none'; }
+  // reset positions for new roles
+  resetRound();
+}
+playerCount.addEventListener('change', updateActiveRoles);
+// apply initial value
+updateActiveRoles();
+
 let lastTs = performance.now();
 function frame(now){
   const dt = Math.min(40, now - lastTs) / 1000; // seconds, clamp
@@ -257,7 +305,7 @@ function frame(now){
   // update debug overlay
   debugEl.textContent = `orient:${orientationAvailable? 'yes':'no'}\nlast β:${(lastDeviceOrientation && lastDeviceOrientation.beta)? lastDeviceOrientation.beta.toFixed(2): 'n/a'} γ:${(lastDeviceOrientation && lastDeviceOrientation.gamma)? lastDeviceOrientation.gamma.toFixed(2): 'n/a'}\ncalib β:${(calibration && calibration.beta)?calibration.beta.toFixed(2):'0'} γ:${(calibration && calibration.gamma)?calibration.gamma.toFixed(2):'0'}`;
   // integrate velocities -> positions
-  for(const role of ['blue','red']){
+  for(const role of activeRoles){
     const p = players[role];
     // predict new position and resolve collisions per-axis so the player can slide along walls
     let nx = p.px + p.vx * dt;

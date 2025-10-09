@@ -6,28 +6,39 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Gyro Stream</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 1rem; }
-    button { padding: 0.6rem 1rem; margin-right: .5rem; }
-    pre { max-height: 220px; overflow:auto; background:#f7f7f7; padding:.5rem; color: #333; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 0.6rem; margin:0; display:flex; flex-direction:column; align-items:stretch; gap:8px; background:#111; color:#fff }
+  .controls{ display:flex; flex-direction:column; gap:8px; align-items:stretch }
+    button { padding: 0.6rem 0.8rem; flex:1; border-radius:8px; border:none; font-weight:600 }
+  .roles{ display:flex; gap:6px; }
+  /* color the role buttons to match players */
+  .roles button { color: #012; font-weight:700; border-radius:8px; }
+  button[data-role="blue"]{ background:#4ea1ff; color:#042434 }
+  button[data-role="red"]{ background:#ff6b6b; color:#3b0000 }
+  button[data-role="yellow"]{ background:#ffd86b; color:#332900 }
+  button[data-role="green"]{ background:#8fe58f; color:#042a04 }
+  .roles button.selected{ outline:3px solid rgba(255,255,255,0.12); transform:translateY(-2px); box-shadow:0 6px 14px rgba(0,0,0,0.35); }
+    @media (max-width:420px){ h2{font-size:16px} button{padding:10px 6px; font-size:14px} }
   </style>
 </head>
 <body>
-  <h2>Gyroscope Streamer</h2>
-  <p id="status">Idle</p>
-  <button id="startBtn">Start Streaming</button>
-  <button id="stopBtn" disabled>Stop</button>
-  <p>Logs:</p>
-  <pre id="log"></pre>
-  <p>Role:</p>
-  <button id="roleBlue" data-role="blue">Blue Player</button>
-  <button id="roleRed" data-role="red">Red Player</button>
+  <h2 style="margin:0;">Gyroscope Streamer</h2>
+  <div class="controls">
+    <div><span id="status">Idle</span></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end"><button id="startBtn">Start</button><button id="stopBtn" disabled>Stop</button></div>
+  </div>
+  <div style="height:100px;">&nbsp;</div>
+  <div class="roles">
+    <button id="roleBlue" data-role="blue">Blue</button>
+    <button id="roleRed" data-role="red">Red</button>
+    <button id="roleYellow" data-role="yellow">Yellow</button>
+    <button id="roleGreen" data-role="green">Green</button>
+  </div>
 
 <script>
 let AUTH_TOKEN = null;
 const startBtn = document.getElementById('startBtn');
 const stopBtn  = document.getElementById('stopBtn');
 const statusEl = document.getElementById('status');
-const logEl    = document.getElementById('log');
 
 let socket = null;
 let listening = false;
@@ -35,16 +46,7 @@ let sendCount = 0;
 let role = 'blue'; // default to blue so game will react
 let latestOrientation = {alpha: null, beta: null, gamma: null};
 
-function log(s) {
-  if (!logEl) return; // safe guard
-  const t = new Date().toISOString();
-  logEl.textContent = `${t} ${s}\n` + logEl.textContent;
-  // keep log from growing indefinitely
-  const lines = logEl.textContent.split('\n');
-  if (lines.length > 200) {
-    logEl.textContent = lines.slice(0,200).join('\n');
-  }
-}
+function log(s){ console.debug('[gyro]', s); }
 
 
 function buildWsUrl() {
@@ -114,20 +116,25 @@ function handleMotion(e) {
 
 // role button handlers
 function applyRoleColor(r) {
-  if (r === 'blue') {
-    document.body.style.background = '#4ea1ff';
-    document.body.style.color = '#e6f4ff';
-  } else if (r === 'red') {
-    document.body.style.background = '#ff6b6b';
-    document.body.style.color = '#ffe6e6';
-  } else {
-    document.body.style.background = '';
-    document.body.style.color = '';
-  }
+  // highlight the selected role button and keep the rest neutral
+  const roles = ['blue','red','yellow','green'];
+  roles.forEach(roleName => {
+    const btn = document.querySelector(`button[data-role="${roleName}"]`);
+    if(!btn) return;
+    if(roleName === r) btn.classList.add('selected'); else btn.classList.remove('selected');
+  });
+  // preserve previous body color behavior for quick visual feedback
+  if (r === 'blue') { document.body.style.background = '#4ea1ff'; document.body.style.color = '#e6f4ff'; }
+  else if (r === 'red') { document.body.style.background = '#ff6b6b'; document.body.style.color = '#ffe6e6'; }
+  else if (r === 'yellow') { document.body.style.background = '#ffd86b'; document.body.style.color = '#332900'; }
+  else if (r === 'green') { document.body.style.background = '#8fe58f'; document.body.style.color = '#042a04'; }
+  else { document.body.style.background = ''; document.body.style.color = ''; }
 }
 
 document.getElementById('roleBlue').addEventListener('click', () => { role='blue'; applyRoleColor('blue'); log('Role=blue'); });
 document.getElementById('roleRed').addEventListener('click', () => { role='red'; applyRoleColor('red'); log('Role=red'); });
+document.getElementById('roleYellow').addEventListener('click', () => { role='yellow'; applyRoleColor('yellow'); log('Role=yellow'); });
+document.getElementById('roleGreen').addEventListener('click', () => { role='green'; applyRoleColor('green'); log('Role=green'); });
 
 // keep latest deviceorientation around so we can include it with motion payloads
 window.addEventListener('deviceorientation', (ev) => {
