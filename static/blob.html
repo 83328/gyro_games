@@ -14,8 +14,12 @@
 <body>
   <h2 style="margin:12px 0 0 0">Blob Eaters</h2>
   <div class="hud">
-    <div class="role">Blue</div><div class="role">Red</div><div class="role">Yellow</div><div class="role">Green</div>
-    <button id="restart" style="margin-left:14px">Restart</button>
+    <div class="role">Blue <span id="sBlueSize">0</span>%</div>
+    <div class="role">Red <span id="sRedSize">0</span>%</div>
+    <div class="role">Yellow <span id="sYellowSize">0</span>%</div>
+    <div class="role">Green <span id="sGreenSize">0</span>%</div>
+    <button id="calib" style="margin-left:8px">Calibrate</button>
+    <button id="restart" style="margin-left:6px">Restart</button>
     <div id="status" style="margin-left:8px">Connecting...</div>
   </div>
   <canvas id="c" width="900" height="600"></canvas>
@@ -53,6 +57,15 @@ initNeutrals();
 
 // inputs from websocket per role
 const inputs = {blue:null, red:null, yellow:null, green:null};
+// per-role calibration offsets (persisted to localStorage)
+let calibrations = {};
+
+function loadCalibrations(){
+  try{ const raw = localStorage.getItem('blob_calibrations'); if(raw) calibrations = JSON.parse(raw); }catch(e){ console.warn('loadCalibrations', e); }
+}
+function saveCalibrations(){
+  try{ localStorage.setItem('blob_calibrations', JSON.stringify(calibrations)); }catch(e){ console.warn('saveCalibrations', e); }
+}
 
 // spawn positions spread out
 function resetGame(){
@@ -125,7 +138,10 @@ function mapInputToVelocity(role){
   // map inputs rawBeta/rawGamma to velocity vector
   const inp = inputs[role];
   if(!inp) return {vx:0, vy:0};
-  const beta = inp.rawBeta || 0; const gamma = inp.rawGamma || 0;
+  // apply calibration offsets when available
+  const cal = calibrations[role] || {};
+  const beta = (inp.rawBeta || 0) - (cal.beta || 0);
+  const gamma = (inp.rawGamma || 0) - (cal.gamma || 0);
   // beta: forward/back -> y, gamma: left/right -> x. Use simple scaling
   const REF = 35;
   const nx = Math.max(-1, Math.min(1, (gamma/REF)));
@@ -165,6 +181,12 @@ function step(dt){
     // smooth displayed area for animation
     p.displayArea += (p.area - p.displayArea) * Math.min(1, dt*6);
   }
+  // update HUD percentages for players (0-100 normalized by displayed area)
+  try{
+    const total = ROLES.reduce((s,r)=>s + (players[r].displayArea||0), 0) || 1;
+    const ids = {blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:'sGreenSize'};
+    for(const r of ROLES){ const pct = Math.round((players[r].displayArea/total)*100); const el = document.getElementById(ids[r]); if(el) el.textContent = String(pct); }
+  }catch(e){ /* ignore HUD errors */ }
   // update neutrals
   for(const n of neutrals){
     // wander
@@ -240,7 +262,25 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 
+// calibration button
+const calibBtn = document.getElementById('calib');
+calibBtn.addEventListener('click', ()=>{
+  // capture current raw inputs as zero for each role that has input
+  for(const r of ROLES){
+    const inp = inputs[r];
+    if(inp){
+      calibrations[r] = { beta: inp.rawBeta || 0, gamma: inp.rawGamma || 0 };
+    }
+  }
+  saveCalibrations();
+  statusEl.textContent = 'Calibrated';
+  setTimeout(()=>{ statusEl.textContent = 'Connected' }, 1200);
+});
+
 restartBtn.addEventListener('click', ()=>{ resetGame(); statusEl.textContent='Restarted'; });
+
+// load any persisted calibrations
+loadCalibrations();
 
 </script>
 </body>

@@ -9,6 +9,7 @@ Lightweight local demo that uses phones as motion controllers and a small Python
 	- `maze.html` — grid-maze runner (2–4 players, corner starts/goals)
 	- `lander.html` — two-player Moon Lander demo
 	- `pong.html` — paddle demo
+	- `blob.html` — simple blob-eating game (4 players)
 - Simple token-based WebSocket API (dev-friendly anonymous mode when no token configured).
 
 Quick start (Linux / macOS)
