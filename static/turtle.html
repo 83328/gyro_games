@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Turtle Race</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #0b0b10;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  canvas {
+    background: linear-gradient(#2a2a2a, #111);
+    border: 2px solid #333;
+    border-radius: 10px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.4);
+  }
+  #info { margin: 8px; font-size: 1.2em; }
+  #scores { margin: 8px; }
+</style>
+</head>
+<body>
+  <h1>Turtle Race</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">
+    Players:
+    <select id="playerCount" style="margin:0 8px">
+      <option value="2">2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+    </select>
+    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
+    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  </div>
+  <canvas id="c" width="700" height="400"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const playerCountSel = document.getElementById('playerCount');
+const yellowScoreContainer = document.getElementById('yellowScoreContainer');
+const greenScoreContainer = document.getElementById('greenScoreContainer');
+const sBlue = document.getElementById('sBlue');
+const sRed = document.getElementById('sRed');
+const sYellow = document.getElementById('sYellow');
+const sGreen = document.getElementById('sGreen');
+
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+let ws=null;
+let activeRoles = ['blue','red'];
+let scores = {blue:0,red:0,yellow:0,green:0};
+let players = {};
+const track = {length: canvas.width - 120}; // finish line position
+let raceRunning = false;
+let countdown = 3; // seconds before race start
+let countdownTimer = null;
+
+// initialize players
+function initPlayers(){
+  const n = parseInt(playerCountSel.value,10);
+  activeRoles = ['blue','red'];
+  if(n>=3){activeRoles.push('yellow'); yellowScoreContainer.style.display='';}
+  else yellowScoreContainer.style.display='none';
+  if(n>=4){activeRoles.push('green'); greenScoreContainer.style.display='';}
+  else greenScoreContainer.style.display='none';
+  players={};
+  const laneHeight = canvas.height / n;
+  let i=0;
+  for(const role of activeRoles){
+    players[role]={x:80,y:laneHeight*(i+0.5),speed:0,power:0};
+    i++;
+  }
+  startCountdown();
+}
+initPlayers();
+playerCountSel.addEventListener('change',()=>{initPlayers();});
+
+// countdown logic
+function startCountdown(){
+  countdown = 3;
+  raceRunning = false;
+  info.textContent = `Race starts in ${countdown}...`;
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(()=>{
+    countdown--;
+    if(countdown>0){
+      info.textContent = `Race starts in ${countdown}...`;
+    } else {
+      clearInterval(countdownTimer);
+      info.textContent = "Go!";
+      raceRunning = true;
+    }
+  },1000);
+}
+
+// draw track and riders
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // lanes
+  const n=activeRoles.length;
+  const laneH=canvas.height/n;
+  for(let i=0;i<n;i++){
+    ctx.fillStyle = (i%2===0)?'#222':'#1a1a1a';
+    ctx.fillRect(0,i*laneH,canvas.width,laneH);
+  }
+
+  // finish line
+  ctx.strokeStyle='#fff';
+  ctx.lineWidth=4;
+  ctx.setLineDash([10,8]);
+  ctx.beginPath();
+  ctx.moveTo(track.length+50,0);
+  ctx.lineTo(track.length+50,canvas.height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // riders + boost meters
+  for(const role of activeRoles){
+    const p = players[role];
+    // draw rider
+    ctx.fillStyle = colors[role];
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 16, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle='#fff';
+    ctx.stroke();
+
+    // (boost meters removed)
+  }
+
+  // (start line removed)
+}
+
+// handle gyroscope input
+function handleInput(role, beta, gamma){
+  const p = players[role]; if(!p || !raceRunning) return;
+  const intensity = (Math.abs(beta) + Math.abs(gamma)) * 0.05; // adjusted multiplier
+  p.power += intensity;
+}
+
+// physics + race logic
+function step(dt){
+  if(!raceRunning) return;
+  for(const role of activeRoles){
+    const p = players[role];
+    // convert power into forward speed
+    p.speed += p.power * 0.6;
+    p.power *= 0.3; // dissipate pedaling effort
+    p.speed *= Math.pow(0.92, dt*60);
+    p.x += p.speed * dt * 0.1;
+    
+    // check finish line
+    if(p.x >= track.length+40){
+      raceRunning=false;
+      scores[role]++;
+      if(role==='blue') sBlue.textContent=scores[role];
+      if(role==='red') sRed.textContent=scores[role];
+      if(role==='yellow') sYellow.textContent=scores[role];
+      if(role==='green') sGreen.textContent=scores[role];
+      info.textContent = `${role} wins the race!`;
+      setTimeout(()=>resetRace(),3000);
+    }
+  }
+}
+
+// reset race
+function resetRace(){
+  initPlayers();
+}
+
+// WebSocket setup
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token=data.token;
+  const proto=(location.protocol==='https:')?'wss':'ws';
+  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws=new WebSocket(wsUrl);
+  ws.onopen=()=>{info.textContent='Connected';startCountdown();};
+  ws.onmessage=(ev)=>{
+    try{
+      const d=JSON.parse(ev.data);
+      if(!d||!d.role||!activeRoles.includes(d.role))return;
+      if(d.beta!==undefined && d.gamma!==undefined){
+        handleInput(d.role, d.beta, d.gamma);
+      }else if(d.orientBeta!==undefined && d.orientGamma!==undefined){
+        handleInput(d.role, d.orientBeta, d.orientGamma);
+      }
+    }catch(e){}
+  };
+  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{info.textContent='No backend /api/token';});
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(40,now-last)/1000; last=now;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

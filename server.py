@@ -60,6 +60,13 @@ def create_app(static_dir: str):
         return web.Response(status=404, text='Not found')
 
     app.router.add_get('/', index_handler)
+    # if there's a sibling 'media' directory, expose it at /media so assets
+    # stored outside the static folder (e.g. media/images) are reachable.
+    media_dir = os.path.abspath(os.path.join(static_dir, '..', 'media'))
+    if os.path.isdir(media_dir):
+        app.router.add_static('/media', path=media_dir, show_index=False)
+        print(f"Serving media files from: {media_dir} at /media")
+
     # mount static files but disable directory index listing for security/UX
     app.router.add_static('/', path=static_dir, show_index=False)
 

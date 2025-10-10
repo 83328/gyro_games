@@ -1,0 +1,289 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gyro Sumo</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #111;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  canvas {
+    background: #222;
+    border: 2px solid #333;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+  }
+  #info { margin: 8px; }
+  #scores { margin: 8px; }
+  button {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 6px;
+    background: #1f6feb;
+    color: white;
+    cursor: pointer;
+  }
+  button:hover { background: #2b7eff; }
+</style>
+</head>
+<body>
+  <h1>Gyro Sumo</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">
+    Players:
+    <select id="playerCount" style="margin:0 8px">
+      <option value="2">2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+    </select>
+    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
+    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  </div>
+
+  <div id="controls" style="margin-bottom:8px;">
+    <button id="calibBtn">Calibrate</button>
+  </div>
+
+  <canvas id="c" width="600" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const playerCountSel = document.getElementById('playerCount');
+const calibBtn = document.getElementById('calibBtn');
+const sBlue = document.getElementById('sBlue');
+const sRed = document.getElementById('sRed');
+const sYellow = document.getElementById('sYellow');
+const sGreen = document.getElementById('sGreen');
+const yellowScoreContainer = document.getElementById('yellowScoreContainer');
+const greenScoreContainer = document.getElementById('greenScoreContainer');
+
+let ws=null;
+const players = {};
+let activeRoles = ['blue','red'];
+const scores = {blue:0, red:0, yellow:0, green:0};
+
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+const arena = {x:300, y:300, radius:280};
+const RADIUS = 26; // increased blob size
+const MAX_SPEED = 220;
+const FRICTION = 0.92;
+const PUSH_FORCE = 0.7;
+
+// calibration
+let calibration = {beta:0, gamma:0, has:false};
+let lastDeviceOrientation = null;
+const rotState = {};
+
+try{ const stored = localStorage.getItem('gyro_sumo_calib'); if(stored){ calibration = JSON.parse(stored); } }catch(e){}
+
+// setup players
+function initPlayers(){
+  const n = parseInt(playerCountSel.value,10);
+  activeRoles = ['blue','red'];
+  if(n >= 3){ activeRoles.push('yellow'); yellowScoreContainer.style.display=''; }
+  else yellowScoreContainer.style.display='none';
+  if(n >= 4){ activeRoles.push('green'); greenScoreContainer.style.display=''; }
+  else greenScoreContainer.style.display='none';
+
+  const startPositions = [
+    {x:arena.x - 150, y:arena.y},
+    {x:arena.x + 150, y:arena.y},
+    {x:arena.x, y:arena.y - 150},
+    {x:arena.x, y:arena.y + 150}
+  ];
+  let i=0;
+  for(const role of activeRoles){
+    players[role] = {x:startPositions[i].x, y:startPositions[i].y, vx:0, vy:0, alive:true};
+    i++;
+  }
+}
+initPlayers();
+playerCountSel.addEventListener('change', ()=>{ initPlayers(); });
+
+// calibration button
+calibBtn.addEventListener('click', ()=>{
+  if(lastDeviceOrientation){
+    calibration.beta = lastDeviceOrientation.beta || 0;
+    calibration.gamma = lastDeviceOrientation.gamma || 0;
+    calibration.has = true;
+    try{ localStorage.setItem('gyro_sumo_calib', JSON.stringify(calibration)); }catch(e){}
+    info.textContent = 'Calibrated!';
+  } else {
+    info.textContent = 'No orientation available to calibrate.';
+  }
+});
+
+// draw
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // arena background gradient
+  const grad = ctx.createRadialGradient(arena.x, arena.y, arena.radius*0.2, arena.x, arena.y, arena.radius);
+  grad.addColorStop(0, '#333');
+  grad.addColorStop(1, '#111');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(arena.x, arena.y, arena.radius, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#666'; ctx.lineWidth=4; ctx.stroke();
+
+  // players
+  for(const role of activeRoles){
+    const p = players[role];
+    if(!p.alive) continue;
+    ctx.fillStyle = colors[role];
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, RADIUS, 0, Math.PI*2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+  }
+}
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+// tilt control
+function handleTilt(role, beta, gamma){
+  const p = players[role]; if(!p || !p.alive) return;
+  let b = beta - (calibration.has ? calibration.beta : 0);
+  let g = gamma - (calibration.has ? calibration.gamma : 0);
+  const REF = 35;
+  const nx = Math.tanh((g/REF)*1.2);
+  const ny = Math.tanh((b/REF)*1.2);
+  p.vx += nx * 8;
+  p.vy += ny * 8;
+}
+
+// collisions between players
+function collidePlayers(){
+  const roles = activeRoles.filter(r=>players[r].alive);
+  for(let i=0;i<roles.length;i++){
+    for(let j=i+1;j<roles.length;j++){
+      const a = players[roles[i]];
+      const b = players[roles[j]];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const minDist = RADIUS*2;
+      if(dist < minDist && dist>0){
+        const overlap = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        // push both apart
+        a.x -= nx * overlap;
+        a.y -= ny * overlap;
+        b.x += nx * overlap;
+        b.y += ny * overlap;
+        // bounce velocities
+        const push = PUSH_FORCE;
+        a.vx -= nx * push; a.vy -= ny * push;
+        b.vx += nx * push; b.vy += ny * push;
+      }
+    }
+  }
+}
+
+// check arena bounds (lose only when fully outside)
+function checkArena(){
+  for(const role of activeRoles){
+    const p = players[role];
+    if(!p.alive) continue;
+    const dx = p.x - arena.x;
+    const dy = p.y - arena.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > arena.radius + RADIUS) { // fully out
+      p.alive = false;
+      info.textContent = `${role} fell off!`;
+    }
+  }
+}
+
+// win detection
+function checkWinner(){
+  const alive = activeRoles.filter(r=>players[r].alive);
+  if(alive.length === 1){
+    const winner = alive[0];
+    scores[winner]++;
+    if(winner==='blue') sBlue.textContent=scores[winner];
+    if(winner==='red') sRed.textContent=scores[winner];
+    if(winner==='yellow') sYellow.textContent=scores[winner];
+    if(winner==='green') sGreen.textContent=scores[winner];
+    info.textContent = `${winner} wins the round!`;
+    setTimeout(()=>{ resetRound(); }, 2000);
+  }
+  if(alive.length === 0){
+    info.textContent = `All fell off! Restarting...`;
+    setTimeout(()=>{ resetRound(); }, 2000);
+  }
+}
+
+// round reset
+function resetRound(){
+  arena.radius = 280;
+  initPlayers();
+}
+
+// WebSocket setup (same API as maze)
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token=data.token;
+  const proto=(location.protocol==='https:')?'wss':'ws';
+  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws=new WebSocket(wsUrl);
+  ws.onopen=()=>{info.textContent='Connected';};
+  ws.onmessage=(ev)=>{
+    try{
+      const d=JSON.parse(ev.data);
+      if(!d||!d.role||!activeRoles.includes(d.role))return;
+      if(d.orientBeta!==undefined && d.orientGamma!==undefined){
+        lastDeviceOrientation = {beta:d.orientBeta,gamma:d.orientGamma};
+        handleTilt(d.role,d.orientBeta,d.orientGamma);
+      }else if(d.beta!==undefined && d.gamma!==undefined){
+        const now=Date.now();
+        if(!rotState[d.role])rotState[d.role]={b:0,g:0,ts:now};
+        const st=rotState[d.role];
+        const dt=Math.min(0.1,(now-st.ts)/1000); st.ts=now;
+        st.b+=(d.beta||0)*dt; st.g+=(d.gamma||0)*dt;
+        st.b*=0.995; st.g*=0.995;
+        handleTilt(d.role,st.b,st.g);
+      }
+    }catch(e){}
+  };
+  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{info.textContent='No backend /api/token';});
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(40,now-last)/1000; last=now;
+  arena.radius = Math.max(120, arena.radius - dt*1.5); // slow shrink
+  // physics
+  for(const role of activeRoles){
+    const p=players[role];
+    if(!p.alive)continue;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.vx *= Math.pow(FRICTION, dt*60);
+    p.vy *= Math.pow(FRICTION, dt*60);
+    const speed=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+    if(speed>MAX_SPEED){
+      p.vx*=MAX_SPEED/speed;
+      p.vy*=MAX_SPEED/speed;
+    }
+  }
+  collidePlayers();
+  checkArena();
+  checkWinner();
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
