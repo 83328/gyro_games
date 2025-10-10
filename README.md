@@ -4,54 +4,33 @@
 Lightweight local demo that uses phones as motion controllers and a small Python aiohttp server to broadcast motion events to browser game pages. The idea behind this project is to see how old phones can be repurposed as motion controllers for simple local multiplayer games, without requiring any app installation.
 
 ## Features
+
 - Phone streamer page (`/gyro.html`) — streams DeviceMotion / DeviceOrientation and acceleration to the server via WebSocket.
-- Several game pages under `static/` that consume streamed events:
-	- `maze.html` — grid-maze runner (2–4 players, corner starts/goals)
-	- `lander.html` — two-player Moon Lander demo
-	- `pong.html` — paddle demo
-	- `blob.html` — simple blob-eating game (4 players)
-	- `turtle.html` — simple turtle-style racer (2–4 players)
-	- `sumo.html` — simple sumo arena (2–4 players)
 
-Below are the playable demos with a short description and thumbnail.
+All the games:
 
-- Maze Runner (`static/maze.html`)
-
-		<img src="media/images/thumb_maze.png" alt="Maze thumbnail" width="360" />
-
+- Maze Runner
 	A multi-player grid maze race. Players tilt their phones to slide through corridors. Includes calibration and orientation-first controls for intuitive steering.
 
-- Moon Lander (`static/lander.html`)
-
-		<img src="media/images/thumb_lander.png" alt="Lander thumbnail" width="360" />
-
+- Moon Lander
 	Two players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Fuel and gentle auto-level assist help make it forgiving.
 
-- Pong (`static/pong.html`)
-
-		<img src="media/images/thumb_pong.png" alt="Pong thumbnail" width="360" />
-
+- Pong
 	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
 
-- Blob-eat (`static/blob.html`)
-
-		<img src="media/images/thumb_blob.png" alt="Blob thumbnail" width="360" />
-
+- Blob-eat
 	Four-player arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
 
-- Turtle-style racer (`static/turtle.html`)
-
-		<img src="media/images/thumb_turtle.png" alt="Turtle thumbnail" width="360" />
-
+- Turtle-style racer
 	Small race demos where players 'pedal' by moving the phone. Multiple lane support and finish-line detection make these quick party games.
-- Sumo Arena (`static/sumo.html`)
 
-		<img src="media/images/thumb_sumo.png" alt="Sumo thumbnail" width="360" />
-
+- Sumo Arena
 	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
-- Simple token-based WebSocket API (dev-friendly anonymous mode when no token configured).
 
-Quick start (Linux / macOS)
+![Thumbnails](media/images/thumb_overview.png)
+
+
+# Quick start (Linux / macOS)
 
 1. Create & activate a virtual environment (recommended):
 
