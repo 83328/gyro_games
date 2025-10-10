@@ -7,7 +7,8 @@
   <style>
     html,body{height:100%}
     body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px;box-sizing:border-box;overflow:hidden}
-    canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px;max-width:100%;height:auto}
+  canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px;max-width:100%;height:auto}
+  #msg{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:6px;color:#cfe;font-weight:600}
     .hud{display:flex;gap:12px;align-items:center}
     button{padding:.4rem .8rem;border-radius:6px;border:none;background:#1f6feb;color:white}
     .score{font-size:14px}
@@ -23,7 +24,7 @@
     <div style="margin-left:12px">Tip: open <code>/gyro.html</code> on your phone and pick a role.</div>
   </div>
   <canvas id="c" width="700" height="420"></canvas>
-  <div id="msg" style="margin-top:8px;color:#cfe">Connecting...</div>
+  <div id="msg" style="color:#cfe">Connecting...</div>
 
 <script>
 const canvas = document.getElementById('c');
@@ -50,8 +51,10 @@ const TARGET_ASPECT = 700/420; // original aspect
 function resizeCanvasToDisplay(){
   // reserve space for header and HUD
   const headerH = (document.querySelector('h1')?.offsetHeight || 40) + (document.querySelector('.hud')?.offsetHeight || 40) + 32;
-  const availW = Math.max(320, window.innerWidth - 24);
-  const availH = Math.max(240, window.innerHeight - headerH - 24);
+  // Prefer visualViewport dimensions when available (handles fullscreen/mobile chrome UI)
+  const vv = window.visualViewport;
+  const availW = Math.max(320, (vv?.width || window.innerWidth) - 24);
+  const availH = Math.max(240, ( (vv?.height || window.innerHeight) - headerH - 24));
   // fit to available area preserving aspect
   let newW = Math.min(availW, Math.floor(availH * TARGET_ASPECT));
   let newH = Math.floor(newW / TARGET_ASPECT);
@@ -66,6 +69,17 @@ function resizeCanvasToDisplay(){
   players.blue.x = W*0.25; players.blue.y = Math.max(40, H*0.12);
   players.red.x = W*0.75; players.red.y = Math.max(40, H*0.12);
 }
+// Debounced resize helper to avoid thrashing when visualViewport fires many events
+let _resizeTimer = null;
+function scheduleResize(){ if(_resizeTimer) clearTimeout(_resizeTimer); _resizeTimer = setTimeout(()=>{ resizeCanvasToDisplay(); _resizeTimer = null; }, 80); }
+
+// Listen to visualViewport changes which occur on fullscreen and when mobile browser chrome hides/shows
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', scheduleResize);
+  window.visualViewport.addEventListener('scroll', scheduleResize);
+}
+// Also listen to orientation change
+window.addEventListener('orientationchange', scheduleResize);
 function genGround(){
   ground = [];
   const segments = 14;
