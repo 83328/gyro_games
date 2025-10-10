@@ -30,7 +30,7 @@ All the games:
 ![Thumbnails](media/images/thumb_overview.png)
 
 
-# Quick start (Linux / macOS)
+## Quick start (Linux / macOS)
 
 1. Create & activate a virtual environment (recommended):
 
