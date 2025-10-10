@@ -13,8 +13,8 @@
     p.small{font-size:12px;color:#a8b4d6;margin:8px 0 0}
    /* thumbnail sizing: keep a max ratio of 4:3 by making the thumb container 4:3
      and letting the image cover the box. This prevents very wide images on desktop. */
-  .thumb{ display:block; aspect-ratio: 4 / 3; overflow:hidden; border-radius:6px; background:#0b0b0b; position:relative }
-  .thumb img.thumb-img{ width:100%; height:100%; object-fit:cover; display:block }
+  .thumb{ display:block; aspect-ratio: 4 / 3; overflow:hidden; border-radius:6px; background:#0b0b0b; position:relative; min-height:120px }
+  .thumb img.thumb-img{ width:100%; height:100%; object-fit:cover; object-position:center center; display:block }
   /* overlay label on image */
   .thumb .overlay{ position:absolute; left:0; right:0; bottom:0; padding:8px 10px; color:#eef; font-weight:600; text-align:center; background:linear-gradient(rgba(0,0,0,0.0), rgba(0,0,0,0.6)); }
   @media(min-width:900px){ .card { width:560px } .thumb-grid{ grid-template-columns: repeat(3, 1fr); gap:8px } }

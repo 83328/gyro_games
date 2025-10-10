@@ -10,6 +10,45 @@ Lightweight local demo that uses phones as motion controllers and a small Python
 	- `lander.html` — two-player Moon Lander demo
 	- `pong.html` — paddle demo
 	- `blob.html` — simple blob-eating game (4 players)
+	- `turtle.html` — simple turtle-style racer (2–4 players)
+	- `sumo.html` — simple sumo arena (2–4 players)
+
+Below are the playable demos with a short description and thumbnail.
+
+- Maze Runner (`static/maze.html`)
+
+		<img src="media/images/thumb_maze.png" alt="Maze thumbnail" width="360" />
+
+	A multi-player grid maze race. Players tilt their phones to slide through corridors. Includes calibration and orientation-first controls for intuitive steering.
+
+- Moon Lander (`static/lander.html`)
+
+		<img src="media/images/thumb_lander.png" alt="Lander thumbnail" width="360" />
+
+	Two players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Fuel and gentle auto-level assist help make it forgiving.
+
+- Pong (`static/pong.html`)
+
+		<img src="media/images/thumb_pong.png" alt="Pong thumbnail" width="360" />
+
+	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
+
+- Blob-eat (`static/blob.html`)
+
+		<img src="media/images/thumb_blob.png" alt="Blob thumbnail" width="360" />
+
+	Four-player arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
+
+- Turtle-style racer (`static/turtle.html`)
+
+		<img src="media/images/thumb_turtle.png" alt="Turtle thumbnail" width="360" />
+
+	Small race demos where players 'pedal' by moving the phone. Multiple lane support and finish-line detection make these quick party games.
+- Sumo Arena (`static/sumo.html`)
+
+		<img src="media/images/thumb_sumo.png" alt="Sumo thumbnail" width="360" />
+
+	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
 - Simple token-based WebSocket API (dev-friendly anonymous mode when no token configured).
 
 Quick start (Linux / macOS)
