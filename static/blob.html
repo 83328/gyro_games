@@ -32,7 +32,19 @@ const restartBtn = document.getElementById('restart');
 // Game constants
 const ROLES = ['blue','red','yellow','green'];
 const COLORS = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
-const WIDTH = CANVAS.width, HEIGHT = CANVAS.height;
+let WIDTH = CANVAS.width, HEIGHT = CANVAS.height;
+
+function resizeCanvasToDisplay(){
+  // fit canvas to available space but keep aspect ratio approx 16:9
+  const pad = 24;
+  const w = Math.min(window.innerWidth - pad, 1400);
+  const h = Math.min(window.innerHeight - pad - 120, 1000);
+  CANVAS.width = Math.max(400, Math.floor(w));
+  CANVAS.height = Math.max(300, Math.floor(h));
+  WIDTH = CANVAS.width; HEIGHT = CANVAS.height;
+}
+window.addEventListener('resize', resizeCanvasToDisplay);
+resizeCanvasToDisplay();
 
 // convert between area and radius
 function areaToR(a){ return Math.sqrt(a / Math.PI); }
@@ -209,26 +221,46 @@ function step(dt){
       const dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx,dy);
       const rA = areaToR(A.area), rB = areaToR(B.area);
       if(d < rA + rB){
-        // overlap: compute transfer
+        // overlap: compute transfer and stronger physical push/impulse
+        const overlap = (rA + rB - d) || 0.001;
+        // safe normal
+        let nx = 1, ny = 0;
+        if(d > 0){ nx = dx / d; ny = dy / d; } else { // perfect overlap, pick random direction
+          nx = Math.random()*2-1; ny = Math.random()*2-1; const L = Math.hypot(nx,ny)||1; nx/=L; ny/=L;
+        }
+        // masses ~ area (clamped)
+        const massA = Math.max(1, A.area);
+        const massB = Math.max(1, B.area);
+        // positional push multiplier: stronger separation
+        const pushMultiplier = 1.2;
+        const push = overlap * pushMultiplier;
+        // velocity impulse factor (tunable)
+        const impulseFactor = 2.0;
+        const impulse = overlap * impulseFactor;
+
         if(A.area > B.area * 1.02){
           const transfer = Math.min(B.area*0.35, A.area*0.12);
           A.area += transfer; B.area = Math.max(8, B.area - transfer);
-          const push = (rA + rB - d) * 0.5 || 0.1;
-          const nx = dx/d, ny = dy/d;
+          // separate more strongly
           A.x -= nx * push; A.y -= ny * push; B.x += nx * push; B.y += ny * push;
+          // apply velocity impulse so the larger blob pushes the smaller
+          A.vx -= nx * impulse * (massB/(massA+massB)); A.vy -= ny * impulse * (massB/(massA+massB));
+          B.vx += nx * impulse * (massA/(massA+massB)); B.vy += ny * impulse * (massA/(massA+massB));
         } else if(B.area > A.area * 1.02){
           const transfer = Math.min(A.area*0.35, B.area*0.12);
           B.area += transfer; A.area = Math.max(8, A.area - transfer);
-          const push = (rA + rB - d) * 0.5 || 0.1;
-          const nx = dx/d, ny = dy/d;
           A.x -= nx * push; A.y -= ny * push; B.x += nx * push; B.y += ny * push;
+          A.vx -= nx * impulse * (massB/(massA+massB)); A.vy -= ny * impulse * (massB/(massA+massB));
+          B.vx += nx * impulse * (massA/(massA+massB)); B.vy += ny * impulse * (massA/(massA+massB));
         } else {
-          // similar sizes -> simple bounce
-          const nx = dx/d, ny = dy/d;
+          // similar sizes -> stronger bounce
           const relx = (B.vx - A.vx), rely = (B.vy - A.vy);
           const sep = (relx*nx + rely*ny);
-          A.vx -= nx * sep * 0.3; A.vy -= ny * sep * 0.3;
-          B.vx += nx * sep * 0.3; B.vy += ny * sep * 0.3;
+          const bounceFactor = 0.6;
+          A.vx -= nx * sep * bounceFactor; A.vy -= ny * sep * bounceFactor;
+          B.vx += nx * sep * bounceFactor; B.vy += ny * sep * bounceFactor;
+          // also separate positions a bit more
+          A.x -= nx * push * 0.5; A.y -= ny * push * 0.5; B.x += nx * push * 0.5; B.y += ny * push * 0.5;
         }
       }
     }

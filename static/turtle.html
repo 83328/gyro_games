@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Turtle Race</title>
 <style>
+  html,body{height:100%}
   body {
     font-family: Arial, Helvetica, sans-serif;
     background: #0b0b10;
@@ -13,12 +14,16 @@
     flex-direction: column;
     align-items: center;
     padding: 12px;
+    box-sizing: border-box;
+    overflow: hidden;
   }
   canvas {
     background: linear-gradient(#2a2a2a, #111);
     border: 2px solid #333;
     border-radius: 10px;
     box-shadow: 0 0 12px rgba(0,0,0,0.4);
+    max-width: 100%;
+    height: auto;
   }
   #info { margin: 8px; font-size: 1.2em; }
   #scores { margin: 8px; }
@@ -37,6 +42,7 @@
     Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
     <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
     <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+    <button id="fs" style="margin-left:12px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
   <canvas id="c" width="700" height="400"></canvas>
 <script>
@@ -131,7 +137,6 @@ function draw(){
     ctx.strokeStyle='#fff';
     ctx.stroke();
 
-    // (boost meters removed)
   }
 
   // (start line removed)

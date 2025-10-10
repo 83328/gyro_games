@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Gyro Sumo</title>
 <style>
+  html,body{height:100%}
   body {
     font-family: Arial, Helvetica, sans-serif;
     background: #111;
@@ -12,7 +13,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 12px;
+  padding: 18px 18px 56px 18px;
+    margin:0; box-sizing:border-box; overflow:hidden;
   }
   canvas {
     background: #222;
@@ -73,11 +75,39 @@ let activeRoles = ['blue','red'];
 const scores = {blue:0, red:0, yellow:0, green:0};
 
 const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
-const arena = {x:300, y:300, radius:280};
+let arena = {x:300, y:300, radius:280};
 const RADIUS = 26; // increased blob size
-const MAX_SPEED = 220;
+let MAX_SPEED = 220;
 const FRICTION = 0.92;
 const PUSH_FORCE = 0.7;
+
+function resizeCanvasToDisplay(){
+  const padW = 24;
+  const h1h = (document.querySelector('h1') ? document.querySelector('h1').getBoundingClientRect().height : 40);
+  const infoH = (document.getElementById('info') ? document.getElementById('info').getBoundingClientRect().height : 0);
+  const scoresH = (document.getElementById('scores') ? document.getElementById('scores').getBoundingClientRect().height : 0);
+  const controlsH = (document.getElementById('controls') ? document.getElementById('controls').getBoundingClientRect().height : 0);
+  const reservedH = h1h + infoH + scoresH + controlsH + 160; // larger reserved bottom margin to avoid clipping
+  const availW = Math.max(300, window.innerWidth - padW);
+  const availH = Math.max(300, window.innerHeight - reservedH);
+  const size = Math.min(availW, Math.max(300, availH - 20), 1200);
+  canvas.width = size; canvas.height = size;
+  // arena centered in canvas with slight margin
+  arena.x = canvas.width/2; arena.y = canvas.height/2; arena.radius = Math.min(canvas.width, canvas.height)/2 - 20;
+  MAX_SPEED = Math.max(120, arena.radius * 0.6);
+  // reposition players relative to arena center if they exist
+  if(players){
+    const startPositions = [
+      {x:arena.x - arena.radius*0.55, y:arena.y},
+      {x:arena.x + arena.radius*0.55, y:arena.y},
+      {x:arena.x, y:arena.y - arena.radius*0.55},
+      {x:arena.x, y:arena.y + arena.radius*0.55}
+    ];
+    let i=0; for(const role of activeRoles){ if(players[role]){ players[role].x = startPositions[i].x; players[role].y = startPositions[i].y; players[role].vx=0; players[role].vy=0; } i++; }
+  }
+}
+window.addEventListener('resize', resizeCanvasToDisplay);
+resizeCanvasToDisplay();
 
 // calibration
 let calibration = {beta:0, gamma:0, has:false};
@@ -96,10 +126,10 @@ function initPlayers(){
   else greenScoreContainer.style.display='none';
 
   const startPositions = [
-    {x:arena.x - 150, y:arena.y},
-    {x:arena.x + 150, y:arena.y},
-    {x:arena.x, y:arena.y - 150},
-    {x:arena.x, y:arena.y + 150}
+    {x:arena.x - arena.radius*0.55, y:arena.y},
+    {x:arena.x + arena.radius*0.55, y:arena.y},
+    {x:arena.x, y:arena.y - arena.radius*0.55},
+    {x:arena.x, y:arena.y + arena.radius*0.55}
   ];
   let i=0;
   for(const role of activeRoles){

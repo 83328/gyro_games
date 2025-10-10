@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Moon Lander — Gyro Games</title>
   <style>
-    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px}
-    canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px}
+    html,body{height:100%}
+    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px;box-sizing:border-box;overflow:hidden}
+    canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px;max-width:100%;height:auto}
     .hud{display:flex;gap:12px;align-items:center}
     button{padding:.4rem .8rem;border-radius:6px;border:none;background:#1f6feb;color:white}
     .score{font-size:14px}
@@ -18,6 +19,7 @@
     <div class="score">Blue: <span id="bScore">0</span></div>
     <div class="score">Red: <span id="rScore">0</span></div>
     <button id="restart">Restart</button>
+    <button id="fs">Fullscreen</button>
     <div style="margin-left:12px">Tip: open <code>/gyro.html</code> on your phone and pick a role.</div>
   </div>
   <canvas id="c" width="700" height="420"></canvas>
@@ -40,9 +42,30 @@ const INPUT_SMOOTH = 0.12; // smoothing factor for incoming beta/gamma
 const AUTO_LEVEL_FACTOR = 1.6; // auto-level assist strength
 
 // ground generation
-const W = canvas.width, H = canvas.height;
+let W = canvas.width, H = canvas.height;
 let ground = [];
 let pads = [];
+// Resize canvas to fit available viewport while preserving aspect ratio
+const TARGET_ASPECT = 700/420; // original aspect
+function resizeCanvasToDisplay(){
+  // reserve space for header and HUD
+  const headerH = (document.querySelector('h1')?.offsetHeight || 40) + (document.querySelector('.hud')?.offsetHeight || 40) + 32;
+  const availW = Math.max(320, window.innerWidth - 24);
+  const availH = Math.max(240, window.innerHeight - headerH - 24);
+  // fit to available area preserving aspect
+  let newW = Math.min(availW, Math.floor(availH * TARGET_ASPECT));
+  let newH = Math.floor(newW / TARGET_ASPECT);
+  // if width would be too small for height, swap
+  if(newH > availH){ newH = availH; newW = Math.floor(newH * TARGET_ASPECT); }
+  canvas.width = Math.max(320, newW);
+  canvas.height = Math.max(240, newH);
+  W = canvas.width; H = canvas.height;
+  // regenerate ground and pads to match new size
+  genGround();
+  // reposition players to sensible start positions relative to new size
+  players.blue.x = W*0.25; players.blue.y = Math.max(40, H*0.12);
+  players.red.x = W*0.75; players.red.y = Math.max(40, H*0.12);
+}
 function genGround(){
   ground = [];
   const segments = 14;
@@ -85,7 +108,25 @@ function resetRound(){
   players.red.x = W*0.75; players.red.y = 60; players.red.vx=0; players.red.vy=0; players.red.angle=0; players.red.av=0; players.red.fuel=100; players.red.landed=false; players.red.crashed=false;
 }
 
+// initial layout
+resizeCanvasToDisplay();
 resetRound();
+
+// respond to window size changes
+window.addEventListener('resize', ()=>{ resizeCanvasToDisplay(); });
+
+// fullscreen toggle
+const fsBtn = document.getElementById('fs');
+fsBtn.addEventListener('click', ()=>{
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+});
+
+// adjust on fullscreen change
+document.addEventListener('fullscreenchange', ()=>{ setTimeout(resizeCanvasToDisplay, 80); });
 
 // draw
 function drawGround(){

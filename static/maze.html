@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Maze Runner</title>
 <style>
-  body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:12px}
-  canvas{background:#222;border:2px solid #333}
+  html,body{height:100%;}
+  body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:20px 20px 36px 20px;margin:0;box-sizing:border-box;overflow:hidden}
+  canvas{background:#222;border:2px solid #333;display:block}
   #info{margin:8px}
   #scores{margin:8px}
 </style>
@@ -68,7 +69,36 @@ calibBtn.addEventListener('click', ()=>{
 
 // Maze grid
 const COLS = 15, ROWS = 15;
-const cell = {w: canvas.width/COLS, h: canvas.height/ROWS};
+let cell = {w: 0, h: 0};
+let MAX_SPEED = 0;
+
+function resizeCanvasToDisplay(){
+  // compute available width/height by subtracting UI elements' heights
+  const padW = 24;
+  const h1h = (document.querySelector('h1') ? document.querySelector('h1').getBoundingClientRect().height : 40);
+  const infoH = (document.getElementById('info') ? document.getElementById('info').getBoundingClientRect().height : 0);
+  const scoresH = (document.getElementById('scores') ? document.getElementById('scores').getBoundingClientRect().height : 0);
+  const ctrlH = (typeof ctrlContainer !== 'undefined' && ctrlContainer ? ctrlContainer.getBoundingClientRect().height : 0);
+  const reservedH = h1h + infoH + scoresH + ctrlH + 120; // extra margin to avoid clipping bottom controls
+  const availW = Math.max(400, window.innerWidth - padW);
+  const availH = Math.max(300, window.innerHeight - reservedH);
+  canvas.width = Math.min(availW, 1400);
+  canvas.height = Math.min(availH, 1200);
+  cell.w = canvas.width / COLS;
+  cell.h = canvas.height / ROWS;
+  MAX_SPEED = Math.min(cell.w, cell.h) * 6;
+  // update player pixel positions from grid coords if players exist
+  if(typeof players !== 'undefined' && players){
+    for(const k of Object.keys(players)){
+      const p = players[k];
+      if(p && typeof p.x === 'number' && typeof p.y === 'number'){
+        p.px = (p.x + 0.5) * cell.w;
+        p.py = (p.y + 0.5) * cell.h;
+      }
+    }
+  }
+}
+window.addEventListener('resize', resizeCanvasToDisplay);
 let maze = [];
 
 // Players positions (grid coords)
@@ -162,7 +192,6 @@ function draw(){
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
 // Continuous movement: map beta/gamma to target velocities and integrate per-frame
-const MAX_SPEED = Math.min(cell.w,cell.h) * 6; // pixels per second
 const V_SMOOTH = 0.15; // velocity smoothing
 
 function handleTilt(role, beta, gamma){
@@ -276,7 +305,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 
 // init
 initMaze();
-// initialize player pixel positions
+// set canvas/cell sizes to fill available space and initialize player pixel positions
+resizeCanvasToDisplay();
 players.blue.px = (0+0.5)*cell.w; players.blue.py = (ROWS-1+0.5)*cell.h;
 players.red.px = (COLS-1+0.5)*cell.w; players.red.py = (0+0.5)*cell.h;
 
