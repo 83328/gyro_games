@@ -5,29 +5,29 @@ Lightweight local demo that uses phones as motion controllers and a small Python
 
 ## Features
 
-- Phone streamer page (`/gyro.html`) — streams DeviceMotion / DeviceOrientation and acceleration to the server via WebSocket.
+- **Red Gyro streamer button** (`/gyro.html`) — streams DeviceMotion / DeviceOrientation and acceleration to the server via WebSocket.
 
 All the games:
 
-- Maze Runner
+- **Maze Runner**
 	A multi-player grid maze race. Players tilt their phones to slide through corridors. Includes calibration and orientation-first controls for intuitive steering.
 
-- Moon Lander
+- **Moon Lander**
 	Two players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Fuel and gentle auto-level assist help make it forgiving.
 
-- Pong
+- **Pong**
 	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
 
-- Blob-eat
+- **Blob-eat**
 	Four-player arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
 
-- Turtle-style racer
+- **Turtle-style racer**
 	Small race demos where players 'pedal' by moving the phone. Multiple lane support and finish-line detection make these quick party games.
 
-- Sumo Arena
+- **Sumo Arena**
 	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
 
-- Blackhole Blaster
+- **Blackhole Blaster**
 	Players control spaceships to avoid and shoot blackholes that appear randomly. The goal is to survive as long as possible while dodging the other ships.
 
 ![Thumbnails](media/images/thumb_overview.png)
