@@ -27,6 +27,9 @@ All the games:
 - Sumo Arena
 	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
 
+- Blackhole Blaster
+	Players control spaceships to avoid and shoot blackholes that appear randomly. The goal is to survive as long as possible while dodging the other ships.
+
 ![Thumbnails](media/images/thumb_overview.png)
 
 
