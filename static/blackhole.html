@@ -1,0 +1,295 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Blackhole Blasters</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: radial-gradient(circle at center, #000010 0%, #000 100%);
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  canvas {
+    background: radial-gradient(circle at center, #000, #050512 70%, #000 100%);
+    border: 2px solid #222;
+    border-radius: 10px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.5);
+  }
+  #info { margin: 8px; font-size: 1.1em; }
+  #scores { margin: 8px; }
+</style>
+</head>
+<body>
+  <h1>Blackhole Blasters</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">
+    Players:
+    <select id="playerCount" style="margin:0 8px">
+      <option value="2">2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+    </select>
+    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
+    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  </div>
+  <canvas id="c" width="700" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const playerCountSel = document.getElementById('playerCount');
+const yellowScoreContainer = document.getElementById('yellowScoreContainer');
+const greenScoreContainer = document.getElementById('greenScoreContainer');
+const sBlue = document.getElementById('sBlue');
+const sRed = document.getElementById('sRed');
+const sYellow = document.getElementById('sYellow');
+const sGreen = document.getElementById('sGreen');
+
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+let ws=null;
+let activeRoles = ['blue','red'];
+let scores = {blue:0,red:0,yellow:0,green:0};
+let players = {};
+let bullets = [];
+let timeLeft = 60;
+let roundRunning = true;
+
+const blackhole = {x:canvas.width/2, y:canvas.height/2, radius:40, gravity:800};
+const GALAXY_RADIUS = 280; // boundary
+
+// init players
+function initPlayers(){
+  const n = parseInt(playerCountSel.value,10);
+  activeRoles = ['blue','red'];
+  if(n>=3){activeRoles.push('yellow'); yellowScoreContainer.style.display='';}
+  else yellowScoreContainer.style.display='none';
+  if(n>=4){activeRoles.push('green'); greenScoreContainer.style.display='';}
+  else greenScoreContainer.style.display='none';
+
+  players={};
+  bullets=[];
+  const angleStep = (Math.PI*2)/n;
+  for(let i=0;i<n;i++){
+    const role = activeRoles[i];
+    const angle = i*angleStep;
+    players[role] = {
+      x: blackhole.x + Math.cos(angle)*200,
+      y: blackhole.y + Math.sin(angle)*200,
+      vx: 0, vy: 0,
+      angle: angle + Math.PI/2,
+      rotSpeed: 0,
+      thrust: 0,
+      cooldown: 0
+    };
+  }
+  timeLeft = 60;
+  roundRunning = true;
+}
+initPlayers();
+playerCountSel.addEventListener('change',()=>initPlayers());
+
+// draw
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // galaxy boundary
+  ctx.strokeStyle='rgba(255,255,255,0.1)';
+  ctx.beginPath();
+  ctx.arc(blackhole.x,blackhole.y,GALAXY_RADIUS,0,Math.PI*2);
+  ctx.stroke();
+
+  // blackhole core
+  const grad = ctx.createRadialGradient(blackhole.x,blackhole.y,0,blackhole.x,blackhole.y,blackhole.radius*3);
+  grad.addColorStop(0,'#000');
+  grad.addColorStop(0.4,'#222');
+  grad.addColorStop(1,'#000');
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  ctx.arc(blackhole.x,blackhole.y,blackhole.radius,0,Math.PI*2);
+  ctx.fill();
+
+  // bullets
+  for(const b of bullets){
+    ctx.fillStyle=b.color;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,3,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // ships
+  for(const role of activeRoles){
+    const p = players[role];
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate(p.angle);
+    ctx.fillStyle=colors[role];
+    ctx.beginPath();
+    ctx.moveTo(0,-10);
+    ctx.lineTo(7,10);
+    ctx.lineTo(-7,10);
+    ctx.closePath();
+    ctx.fill();
+    if(p.thrust>0){
+      ctx.fillStyle='orange';
+      ctx.beginPath();
+      ctx.moveTo(-4,10);
+      ctx.lineTo(0,10+Math.random()*6);
+      ctx.lineTo(4,10);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle='#fff';
+  ctx.font='14px monospace';
+  ctx.fillText(`Time left: ${Math.ceil(timeLeft)}s`,10,20);
+}
+
+// step
+function step(dt){
+  if(!roundRunning) return;
+  timeLeft -= dt;
+  if(timeLeft<=0){
+    roundRunning=false;
+    info.textContent="Time's up!";
+    setTimeout(()=>initPlayers(),3000);
+  }
+
+  // update players
+  for(const role of activeRoles){
+    const p=players[role];
+
+    // rotate
+    p.angle += p.rotSpeed * dt;
+
+    // thrust
+    const thrustX = Math.sin(p.angle) * p.thrust * 200;
+    const thrustY = -Math.cos(p.angle) * p.thrust * 200;
+    p.vx += thrustX * dt;
+    p.vy += thrustY * dt;
+
+    // gravity
+    const dx = blackhole.x - p.x;
+    const dy = blackhole.y - p.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    const pull = blackhole.gravity / (dist*dist);
+    p.vx += dx/dist * pull * dt;
+    p.vy += dy/dist * pull * dt;
+
+    // move
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    // limit to galaxy boundary
+    const cx = p.x - blackhole.x;
+    const cy = p.y - blackhole.y;
+    const distFromCenter = Math.sqrt(cx*cx+cy*cy);
+    if(distFromCenter > GALAXY_RADIUS){
+      const nx = cx/distFromCenter;
+      const ny = cy/distFromCenter;
+      p.x = blackhole.x + nx * GALAXY_RADIUS;
+      p.y = blackhole.y + ny * GALAXY_RADIUS;
+      // bounce back slightly
+      const dot = p.vx*nx + p.vy*ny;
+      p.vx -= 1.2*dot*nx;
+      p.vy -= 1.2*dot*ny;
+    }
+
+    // friction
+    p.vx *= 0.995; p.vy *= 0.995;
+
+    // shooting
+    p.cooldown -= dt;
+    if(p.cooldown<=0){
+      bullets.push({
+        x: p.x + Math.sin(p.angle)*12,
+        y: p.y - Math.cos(p.angle)*12,
+        vx: Math.sin(p.angle)*300 + p.vx,
+        vy: -Math.cos(p.angle)*300 + p.vy,
+        color: colors[role],
+        owner: role,
+        life: 2
+      });
+      p.cooldown = 1.0;
+    }
+  }
+
+  // update bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    const b=bullets[i];
+    b.x += b.vx*dt;
+    b.y += b.vy*dt;
+    b.life -= dt;
+    if(b.life<=0){bullets.splice(i,1);continue;}
+
+    // collisions
+    for(const role of activeRoles){
+      if(role===b.owner) continue;
+      const p=players[role];
+      const dx=b.x-p.x, dy=b.y-p.y;
+      if(dx*dx+dy*dy<150){
+        scores[b.owner]++;
+        if(b.owner==='blue') sBlue.textContent=scores[b.owner];
+        if(b.owner==='red') sRed.textContent=scores[b.owner];
+        if(b.owner==='yellow') sYellow.textContent=scores[b.owner];
+        if(b.owner==='green') sGreen.textContent=scores[b.owner];
+        bullets.splice(i,1);
+        break;
+      }
+    }
+  }
+}
+
+// input
+function handleTilt(role,beta,gamma){
+  const p=players[role]; if(!p||!roundRunning)return;
+
+  // Forward/back (beta) = thrust
+  const thrustVal = Math.max(0, Math.min(1, (-beta)/35));
+  p.thrust = thrustVal;
+
+  // Left/right (gamma) = rotation speed
+  const rotVal = Math.max(-1, Math.min(1, gamma/40));
+  p.rotSpeed = rotVal * 3.5; // radians per sec
+}
+
+// websocket
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token=data.token;
+  const proto=(location.protocol==='https:')?'wss':'ws';
+  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws=new WebSocket(wsUrl);
+  ws.onopen=()=>{info.textContent='Connected';};
+  ws.onmessage=(ev)=>{
+    try{
+      const d=JSON.parse(ev.data);
+      if(!d||!d.role||!activeRoles.includes(d.role))return;
+      if(d.orientBeta!==undefined && d.orientGamma!==undefined){
+        handleTilt(d.role,d.orientBeta,d.orientGamma);
+      }else if(d.beta!==undefined && d.gamma!==undefined){
+        handleTilt(d.role,d.beta,d.gamma);
+      }
+    }catch(e){}
+  };
+  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{info.textContent='No backend /api/token';});
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(40,now-last)/1000; last=now;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
