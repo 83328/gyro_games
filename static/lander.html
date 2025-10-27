@@ -17,8 +17,6 @@
 <body>
   <h1>Moon Lander</h1>
   <div class="hud">
-    <div class="score" id="scoresContainer">Blue: <span id="bScore">0</span></div>
-    <div class="score" id="rScoreContainer">Red: <span id="rScore">0</span></div>
     <label style="margin-left:8px">Players:
       <select id="playerCount" style="margin-left:6px">
         <option value="2">2</option>
@@ -28,7 +26,8 @@
     </label>
     <button id="restart">Restart</button>
     <button id="fs">Fullscreen</button>
-    <div style="margin-left:12px">Tip: open <code>/gyro.html</code> on your phone and pick a role.</div>
+    <!-- per-role score containers will be appended here -->
+    <div id="scoresHolder" class="scores" style="display:flex;gap:12px;align-items:center;margin-left:12px"></div>
   </div>
   <canvas id="c" width="700" height="420"></canvas>
   <div id="msg" style="color:#cfe">Connecting...</div>
@@ -37,8 +36,8 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const msg = document.getElementById('msg');
-const bScoreEl = document.getElementById('bScore');
-const rScoreEl = document.getElementById('rScore');
+// score elements are created dynamically in #scoresHolder
+const scoresHolder = document.getElementById('scoresHolder');
 const restartBtn = document.getElementById('restart');
 
 // Game settings — tuned to be easier to control
@@ -108,6 +107,8 @@ function groundYAt(x){
 // players state (dynamic based on selected player count). Roles in order: blue, red, yellow, green
 const ROLE_ORDER = ['blue','red','yellow','green'];
 let players = {};
+let running = false; // whether physics/controls are active
+let _countdownTimer = null;
 
 function initPlayers(){
   const n = parseInt(document.getElementById('playerCount')?.value || 2, 10);
@@ -115,7 +116,7 @@ function initPlayers(){
   const gap = W / (n + 1);
   for(let i=0;i<n;i++){
     const role = ROLE_ORDER[i];
-    players[role] = { x: gap*(i+1), y: Math.max(60, H*0.12), vx:0, vy:0, angle:0, av:0, fuel:100, landed:false, crashed:false, score:0 };
+    players[role] = { x: gap*(i+1), y: Math.max(60, H*0.12), vx:0, vy:0, angle:0, av:0, thrust:0, fuel:100, landed:false, crashed:false, score:0 };
   }
   // build pads evenly across width
   pads = [];
@@ -125,16 +126,18 @@ function initPlayers(){
     const role = ROLE_ORDER[i];
     pads.push({ x: px, y: groundYAt(px), w: padW, role });
   }
-  // update HUD containers visibility
-  for(const [idx, r] of ROLE_ORDER.entries()){
-    const elId = (r==='blue')? 'bScoreContainer' : (r==='red')? 'rScoreContainer' : `${r}ScoreContainer`;
-    let el = document.getElementById(elId);
-    if(!el){
-      // create container if missing
-      el = document.createElement('div'); el.id = elId; el.className='score'; el.innerHTML = `${r.charAt(0).toUpperCase()+r.slice(1)}: <span id="${r}Score">0</span>`;
-      document.querySelector('.hud').insertBefore(el, document.getElementById('restart'));
+  // rebuild the per-role score containers in the scoresHolder
+  if(scoresHolder){
+    // clear existing
+    scoresHolder.innerHTML = '';
+    for(let i=0;i<n;i++){
+      const role = ROLE_ORDER[i];
+      const el = document.createElement('div');
+      el.className = 'score';
+      el.id = `${role}ScoreContainer`;
+      el.innerHTML = `${role.charAt(0).toUpperCase()+role.slice(1)}: <span id="${role}Score">0</span>`;
+      scoresHolder.appendChild(el);
     }
-    el.style.display = (idx < n) ? '' : 'none';
   }
 }
 
@@ -148,7 +151,32 @@ function resetRound(){
     const p = players[r];
     p.x = Math.max(10, Math.min(W-10, p.x));
     p.y = Math.max(40, H*0.12); p.vx=0; p.vy=0; p.angle=0; p.av=0; p.fuel=100; p.landed=false; p.crashed=false;
+    // ensure no immediate thrust on round start
+    p.thrust = 0;
+    // clear any stale inputs for this role
+    if(inputs[r]){ inputs[r].rawBeta = 0; inputs[r].rawGamma = 0; inputs[r].beta = 0; inputs[r].gamma = 0; }
   }
+  // begin a new round with countdown
+  startCountdown();
+}
+
+function startCountdown(){
+  // show a 3..2..1 then enable running
+  let count = 3;
+  running = false;
+  msg.textContent = `Starting in ${count}...`;
+  if(_countdownTimer) clearInterval(_countdownTimer);
+  _countdownTimer = setInterval(()=>{
+    count -= 1;
+    if(count > 0){ msg.textContent = `Starting in ${count}...`; }
+    else { clearInterval(_countdownTimer); msg.textContent = 'Go!'; _countdownTimer = null; beginRun(); }
+  }, 1000);
+}
+
+function beginRun(){
+  // zero thrust and mark running true
+  for(const r of Object.keys(players)){ if(players[r]) players[r].thrust = 0; }
+  running = true;
 }
 
 // initial layout
@@ -219,17 +247,21 @@ function drawHUD(){
 
 // physics and rules
 function step(dt){
+  // if countdown hasn't finished, don't apply physics so ships stay in place
+  if(!running) return;
+
   for(const role of Object.keys(players)){
     const p = players[role];
     if(p.landed || p.crashed) { p.thrust = 0; continue; }
     // ensure inputs exist for this role
     if(!inputs[role]) inputs[role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
-    // smooth incoming raw inputs into working values
-    inputs[role].beta = inputs[role].beta * (1 - INPUT_SMOOTH) + (inputs[role].rawBeta || 0) * INPUT_SMOOTH;
-    inputs[role].gamma = inputs[role].gamma * (1 - INPUT_SMOOTH) + (inputs[role].rawGamma || 0) * INPUT_SMOOTH;
-    const beta = inputs[role].beta || 0; const gamma = inputs[role].gamma || 0;
-    // thrust mapping: positive beta -> thrust (tilt up increases thrust)
-    let thrust = Math.max(0, Math.min(1, (beta)/35));
+  // smooth incoming raw inputs into working values
+  inputs[role].beta = inputs[role].beta * (1 - INPUT_SMOOTH) + (inputs[role].rawBeta || 0) * INPUT_SMOOTH;
+  inputs[role].gamma = inputs[role].gamma * (1 - INPUT_SMOOTH) + (inputs[role].rawGamma || 0) * INPUT_SMOOTH;
+  const beta = inputs[role].beta || 0; const gamma = inputs[role].gamma || 0;
+  // thrust mapping: positive beta -> thrust (tilt up increases thrust)
+  let thrust = 0;
+  if(running){ thrust = Math.max(0, Math.min(1, (beta)/35)); }
     // small deadzone
     if(Math.abs(thrust) < 0.03) thrust = 0;
     // rotation from gamma: left/right tilt -> angular acceleration sign
@@ -298,6 +330,10 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
+      // normalize short role codes (b/r/y/g -> blue/red/yellow/green)
+      if(typeof d.role === 'string' && d.role.length === 1){
+        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+      }
       if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
         if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
         inputs[d.role].rawBeta = d.orientBeta;

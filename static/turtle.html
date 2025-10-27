@@ -189,7 +189,12 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
-      if(!d||!d.role||!activeRoles.includes(d.role))return;
+      if(!d||!d.role) return;
+      // normalize short role codes
+      if(typeof d.role === 'string' && d.role.length === 1){
+        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+      }
+      if(!activeRoles.includes(d.role)) return;
       if(d.beta!==undefined && d.gamma!==undefined){
         handleInput(d.role, d.beta, d.gamma);
       }else if(d.orientBeta!==undefined && d.orientGamma!==undefined){

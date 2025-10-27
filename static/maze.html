@@ -272,6 +272,10 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
+      // map short role codes to full names
+      if(typeof d.role === 'string' && d.role.length===1){
+        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+      }
         // if orientation angles are provided, prefer them (more stable for tilt)
         if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
         if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){

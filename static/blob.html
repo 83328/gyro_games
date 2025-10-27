@@ -101,6 +101,10 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || !d.role) return;
+      // normalize short role codes (b/r/y/g -> blue/red/yellow/green)
+      if(typeof d.role === 'string' && d.role.length===1){
+        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+      }
       // store orientation if provided, else integrate beta/gamma
       const t = Date.now();
       if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, ts:0};

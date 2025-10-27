@@ -187,7 +187,10 @@
                 try {
                     const d = JSON.parse(ev.data);
                     if (!d) return;
-                    const msgRole = d.role || 'blue';
+                    let msgRole = d.role || 'blue';
+                    if(typeof msgRole === 'string' && msgRole.length === 1){
+                        msgRole = (msgRole === 'b' ? 'blue' : (msgRole === 'r' ? 'red' : (msgRole === 'y' ? 'yellow' : (msgRole === 'g' ? 'green' : msgRole))));
+                    }
                     if (d.beta !== undefined) updatePaddle(d.beta, msgRole);
                 } catch(e) { /* ignore parse errors */ }
             };

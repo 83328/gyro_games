@@ -87,21 +87,28 @@ function handleMotion(e) {
   if (!listening) return;
   const r = e.rotationRate || {};
   const acc = e.acceleration || e.accelerationIncludingGravity || {};
+  function fmt(v){
+    if (v === null || v === undefined) return null;
+    if (typeof v !== 'number') return v;
+    // round to 4 decimals
+    return Number(v.toFixed(4));
+  }
   // minimal payload: timestamp and beta only
   const payload = {
     t: Date.now(),
     // gyro rotation rates (deg/s)
-    beta: r.beta || 0,
-    gamma: r.gamma || 0,
+    beta: fmt(r.beta || 0),
+    gamma: fmt(r.gamma || 0),
     // orientation angles (deg) when available — more stable for tilt controls
-    orientAlpha: latestOrientation.alpha,
-    orientBeta: latestOrientation.beta,
-    orientGamma: latestOrientation.gamma,
+    orientAlpha: fmt(latestOrientation.alpha),
+    orientBeta: fmt(latestOrientation.beta),
+    orientGamma: fmt(latestOrientation.gamma),
     // acceleration (m/s^2) — can be used for flick/momentum controls
-    ax: acc.x || 0,
-    ay: acc.y || 0,
-    az: acc.z || 0,
-    role
+    ax: fmt(acc.x || 0),
+    ay: fmt(acc.y || 0),
+    az: fmt(acc.z || 0),
+    // send short role codes to reduce bandwidth: b/r/y/g
+    role: (role === 'blue' ? 'b' : (role === 'red' ? 'r' : (role === 'yellow' ? 'y' : (role === 'green' ? 'g' : role))))
   };
   const s = JSON.stringify(payload);
   if (socket && socket.readyState === WebSocket.OPEN) {
