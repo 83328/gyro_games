@@ -183,7 +183,8 @@ function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 // tilt control
 function handleTilt(role, beta, gamma){
   const p = players[role]; if(!p || !p.alive) return;
-  let b = beta - (calibration.has ? calibration.beta : 0);
+  // invert vertical axis so up/down are swapped
+  let b = -(beta - (calibration.has ? calibration.beta : 0));
   let g = gamma - (calibration.has ? calibration.gamma : 0);
   const REF = 35;
   const nx = Math.tanh((g/REF)*1.2);
@@ -292,7 +293,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 let last=performance.now();
 function frame(now){
   const dt=Math.min(40,now-last)/1000; last=now;
-  arena.radius = Math.max(120, arena.radius - dt*1.5); // slow shrink
+  // shrink arena twice as fast
+  arena.radius = Math.max(120, arena.radius - dt*3.0); // faster shrink
   // physics
   for(const role of activeRoles){
     const p=players[role];

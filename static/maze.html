@@ -204,8 +204,8 @@ function handleTilt(role, beta, gamma){
   const dead = DEFAULT_DEADZONE;
   let b = beta, g = gamma;
   if(calibration.has){ b = b - calibration.beta; g = g - calibration.gamma; }
-  // forward/back mapping: do not invert beta here
-  b = b;
+  // forward/back mapping: invert beta so up/down are swapped
+  b = -b;
   // apply deadzone
   function applyDeadzone(v){ return Math.abs(v) < dead ? 0 : (v > 0 ? v - dead : v + dead); }
   b = applyDeadzone(b); g = applyDeadzone(g);
