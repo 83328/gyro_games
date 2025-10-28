@@ -18,6 +18,10 @@
     <div class="role">Red <span id="sRedSize">0</span>%</div>
     <div class="role">Yellow <span id="sYellowSize">0</span>%</div>
     <div class="role">Green <span id="sGreenSize">0</span>%</div>
+    <div class="role">Orange <span id="sOrangeSize">0</span>%</div>
+    <div class="role">Purple <span id="sPurpleSize">0</span>%</div>
+    <div class="role">Cyan <span id="sCyanSize">0</span>%</div>
+    <div class="role">Magenta <span id="sMagentaSize">0</span>%</div>
     <button id="calib" style="margin-left:8px">Calibrate</button>
     <button id="restart" style="margin-left:6px">Restart</button>
     <div id="status" style="margin-left:8px">Connecting...</div>
@@ -30,8 +34,8 @@ const statusEl = document.getElementById('status');
 const restartBtn = document.getElementById('restart');
 
 // Game constants
-const ROLES = ['blue','red','yellow','green'];
-const COLORS = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+const ROLES = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+const COLORS = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f', orange:'#ff9f4d', purple:'#b58cff', cyan:'#4de6e6', magenta:'#ff6bff'};
 let WIDTH = CANVAS.width, HEIGHT = CANVAS.height;
 
 function resizeCanvasToDisplay(){
@@ -67,8 +71,8 @@ function initNeutrals(){
 }
 initNeutrals();
 
-// inputs from websocket per role
-const inputs = {blue:null, red:null, yellow:null, green:null};
+// inputs from websocket per role (initialize for all roles)
+const inputs = {blue:null, red:null, yellow:null, green:null, orange:null, purple:null, cyan:null, magenta:null};
 // per-role calibration offsets (persisted to localStorage)
 let calibrations = {};
 
@@ -81,10 +85,19 @@ function saveCalibrations(){
 
 // spawn positions spread out
 function resetGame(){
-  players.blue.x = WIDTH*0.1; players.blue.y = HEIGHT*0.9; players.blue.vx=0; players.blue.vy=0; players.blue.area=rToArea(20); players.blue.displayArea = players.blue.area;
-  players.red.x  = WIDTH*0.9; players.red.y  = HEIGHT*0.1; players.red.vx=0; players.red.vy=0; players.red.area=rToArea(20); players.red.displayArea = players.red.area;
-  players.yellow.x = WIDTH*0.9; players.yellow.y = HEIGHT*0.9; players.yellow.vx=0; players.yellow.vy=0; players.yellow.area=rToArea(18); players.yellow.displayArea = players.yellow.area;
-  players.green.x  = WIDTH*0.1; players.green.y  = HEIGHT*0.1; players.green.vx=0; players.green.vy=0; players.green.area=rToArea(16); players.green.displayArea = players.green.area;
+  // initial sizes per role (radius-based values mapped to area)
+  const initSizes = { blue:20, red:20, yellow:18, green:16, orange:16, purple:16, cyan:16, magenta:16 };
+  // place players in a 4x2 grid for predictable spread
+  const cols = 4;
+  for(let i=0;i<ROLES.length;i++){
+    const r = ROLES[i];
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = Math.max(20, (col + 0.5) * WIDTH / cols);
+    const y = Math.max(20, (row + 0.5) * HEIGHT / 2);
+    if(!players[r]) players[r] = { x, y, vx:0, vy:0, area: rToArea(initSizes[r] || 16), displayArea: rToArea(initSizes[r] || 16), lastInput:0 };
+    players[r].x = x; players[r].y = y; players[r].vx = 0; players[r].vy = 0; players[r].area = rToArea(initSizes[r] || 16); players[r].displayArea = players[r].area; players[r].lastInput = 0;
+  }
   initNeutrals();
 }
 resetGame();
@@ -101,9 +114,18 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || !d.role) return;
-      // normalize short role codes (b/r/y/g -> blue/red/yellow/green)
+      // normalize short role codes (b/r/y/g/o/p/c/m -> blue/red/yellow/green/orange/purple/cyan/magenta)
       if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' : d.role
+        );
       }
       // store orientation if provided, else integrate beta/gamma
       const t = Date.now();
@@ -200,7 +222,10 @@ function step(dt){
   // update HUD percentages for players (0-100 normalized by displayed area)
   try{
     const total = ROLES.reduce((s,r)=>s + (players[r].displayArea||0), 0) || 1;
-    const ids = {blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:'sGreenSize'};
+    const ids = {
+      blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:'sGreenSize',
+      orange:'sOrangeSize', purple:'sPurpleSize', cyan:'sCyanSize', magenta:'sMagentaSize'
+    };
     for(const r of ROLES){ const pct = Math.round((players[r].displayArea/total)*100); const el = document.getElementById(ids[r]); if(el) el.textContent = String(pct); }
   }catch(e){ /* ignore HUD errors */ }
   // update neutrals
@@ -294,6 +319,8 @@ function frame(now){
   const dt = Math.min(60, now - last)/1000; last = now;
   step(dt);
   draw();
+  // refresh HUD sizes after draw
+  updateHudSizes();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -314,6 +341,20 @@ calibBtn.addEventListener('click', ()=>{
 });
 
 restartBtn.addEventListener('click', ()=>{ resetGame(); statusEl.textContent='Restarted'; });
+
+function updateHudSizes(){
+  try{
+    const total = ROLES.reduce((s,r)=>s + (players[r].displayArea||0), 0) || 1;
+    const ids = {
+      blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:'sGreenSize',
+      orange:'sOrangeSize', purple:'sPurpleSize', cyan:'sCyanSize', magenta:'sMagentaSize'
+    };
+    for(const r of ROLES){ const pct = Math.round((players[r].displayArea/total)*100); const el = document.getElementById(ids[r]); if(el) el.textContent = String(pct); }
+  }catch(e){}
+}
+
+// ensure HUD updates immediately after initial reset and on manual restart
+updateHudSizes();
 
 // load any persisted calibrations
 loadCalibrations();

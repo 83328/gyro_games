@@ -38,10 +38,18 @@
       <option value="2">2 players</option>
       <option value="3">3 players</option>
       <option value="4">4 players</option>
+      <option value="5">5 players</option>
+      <option value="6">6 players</option>
+      <option value="7">7 players</option>
+      <option value="8">8 players</option>
     </select>
     Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
-    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
-    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+  <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  <span id="orangeScoreContainer" style="display:none"> — Orange: <span id="sOrange">0</span></span>
+  <span id="purpleScoreContainer" style="display:none"> — Purple: <span id="sPurple">0</span></span>
+  <span id="cyanScoreContainer" style="display:none"> — Cyan: <span id="sCyan">0</span></span>
+  <span id="magentaScoreContainer" style="display:none"> — Magenta: <span id="sMagenta">0</span></span>
     <button id="fs" style="margin-left:12px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
   <canvas id="c" width="700" height="400"></canvas>
@@ -52,15 +60,23 @@ const info = document.getElementById('info');
 const playerCountSel = document.getElementById('playerCount');
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
+const orangeScoreContainer = document.getElementById('orangeScoreContainer');
+const purpleScoreContainer = document.getElementById('purpleScoreContainer');
+const cyanScoreContainer = document.getElementById('cyanScoreContainer');
+const magentaScoreContainer = document.getElementById('magentaScoreContainer');
 const sBlue = document.getElementById('sBlue');
 const sRed = document.getElementById('sRed');
 const sYellow = document.getElementById('sYellow');
 const sGreen = document.getElementById('sGreen');
+const sOrange = document.getElementById('sOrange');
+const sPurple = document.getElementById('sPurple');
+const sCyan = document.getElementById('sCyan');
+const sMagenta = document.getElementById('sMagenta');
 
-const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f', orange:'#ffae42', purple:'#b388ff', cyan:'#4deeea', magenta:'#ff6bd6'};
 let ws=null;
 let activeRoles = ['blue','red'];
-let scores = {blue:0,red:0,yellow:0,green:0};
+let scores = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
 let players = {};
 const track = {length: canvas.width - 120}; // finish line position
 let raceRunning = false;
@@ -70,13 +86,17 @@ let countdownTimer = null;
 // initialize players
 function initPlayers(){
   const n = parseInt(playerCountSel.value,10);
-  activeRoles = ['blue','red'];
-  if(n>=3){activeRoles.push('yellow'); yellowScoreContainer.style.display='';}
-  else yellowScoreContainer.style.display='none';
-  if(n>=4){activeRoles.push('green'); greenScoreContainer.style.display='';}
-  else greenScoreContainer.style.display='none';
+  const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
+  // show/hide score containers
+  yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
+  greenScoreContainer.style.display = (n >= 4) ? '' : 'none';
+  orangeScoreContainer.style.display = (n >= 5) ? '' : 'none';
+  purpleScoreContainer.style.display = (n >= 6) ? '' : 'none';
+  cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
+  magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
   players={};
-  const laneHeight = canvas.height / n;
+  const laneHeight = canvas.height / activeRoles.length;
   let i=0;
   for(const role of activeRoles){
     players[role]={x:80,y:laneHeight*(i+0.5),speed:0,power:0};
@@ -162,13 +182,18 @@ function step(dt){
     
     // check finish line
     if(p.x >= track.length+40){
-      raceRunning=false;
-      scores[role]++;
-      if(role==='blue') sBlue.textContent=scores[role];
-      if(role==='red') sRed.textContent=scores[role];
-      if(role==='yellow') sYellow.textContent=scores[role];
-      if(role==='green') sGreen.textContent=scores[role];
-      info.textContent = `${role} wins the race!`;
+  raceRunning=false;
+  scores[role]++;
+  // refresh all score displays so newly visible ones show correct values
+  sBlue.textContent = scores.blue;
+  sRed.textContent = scores.red;
+  sYellow.textContent = scores.yellow;
+  sGreen.textContent = scores.green;
+  if(typeof sOrange !== 'undefined') sOrange.textContent = scores.orange;
+  if(typeof sPurple !== 'undefined') sPurple.textContent = scores.purple;
+  if(typeof sCyan !== 'undefined') sCyan.textContent = scores.cyan;
+  if(typeof sMagenta !== 'undefined') sMagenta.textContent = scores.magenta;
+  info.textContent = `${role} wins the race!`;
       setTimeout(()=>resetRace(),3000);
     }
   }
@@ -181,29 +206,33 @@ function resetRace(){
 
 // WebSocket setup
 fetch('/api/token').then(r=>r.json()).then(data=>{
-  const token=data.token;
-  const proto=(location.protocol==='https:')?'wss':'ws';
-  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
-  ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{info.textContent='Connected';startCountdown();};
-  ws.onmessage=(ev)=>{
+  const token = data.token;
+  const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+  const wsUrl = data.ws_url ? (data.ws_url.includes('?') ? data.ws_url + '&token=' + encodeURIComponent(token) : data.ws_url + '?token=' + encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = ()=>{ info.textContent = 'Connected'; startCountdown(); };
+  ws.onmessage = (ev)=>{
     try{
-      const d=JSON.parse(ev.data);
-      if(!d||!d.role) return;
-      // normalize short role codes
+      const d = JSON.parse(ev.data); if(!d) return;
       if(typeof d.role === 'string' && d.role.length === 1){
-        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' : d.role
+        );
       }
       if(!activeRoles.includes(d.role)) return;
-      if(d.beta!==undefined && d.gamma!==undefined){
-        handleInput(d.role, d.beta, d.gamma);
-      }else if(d.orientBeta!==undefined && d.orientGamma!==undefined){
-        handleInput(d.role, d.orientBeta, d.orientGamma);
-      }
+      if(d.beta!==undefined && d.gamma!==undefined){ handleInput(d.role, d.beta, d.gamma); }
+      else if(d.orientBeta!==undefined && d.orientGamma!==undefined){ handleInput(d.role, d.orientBeta, d.orientGamma); }
     }catch(e){}
   };
-  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
-}).catch(e=>{info.textContent='No backend /api/token';});
+  ws.onclose = ()=>{ info.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
+}).catch(e=>{ info.textContent = 'No backend /api/token'; });
 
 let last=performance.now();
 function frame(now){

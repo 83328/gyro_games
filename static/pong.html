@@ -55,13 +55,6 @@
     // blue paddle (bottom)
     ctx.fillStyle = '#4ea1ff';
     ctx.fillRect(blueX, canvas.height - paddleHeight - 4, paddleWidth, paddleHeight);
-        // ball
-        ctx.beginPath(); ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2); ctx.fillStyle='#eee'; ctx.fill(); ctx.closePath();
-    }
-
-    function updateBall() {
-        ballX += ballSpeedX; ballY += ballSpeedY;
-        // horizontal wall bounce
         if (ballX - ballRadius < 0 || ballX + ballRadius > canvas.width) ballSpeedX = -ballSpeedX;
 
         // paddle collisions
@@ -94,6 +87,17 @@
             resetBall();
             appendLog('Red missed - point to Blue');
         }
+        // draw the ball
+        ctx.beginPath();
+        ctx.fillStyle = '#fff';
+        ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // advance the ball position
+    function updateBall() {
+        ballX += ballSpeedX;
+        ballY += ballSpeedY;
     }
 
     function appendLog(msg) {
@@ -187,11 +191,14 @@
                 try {
                     const d = JSON.parse(ev.data);
                     if (!d) return;
-                    let msgRole = d.role || 'blue';
-                    if(typeof msgRole === 'string' && msgRole.length === 1){
-                        msgRole = (msgRole === 'b' ? 'blue' : (msgRole === 'r' ? 'red' : (msgRole === 'y' ? 'yellow' : (msgRole === 'g' ? 'green' : msgRole))));
+                    if(typeof d.role === 'string' && d.role.length === 1){
+                        // For Pong we only accept blue (b) and red (r) players
+                        d.role = (
+                            d.role === 'b' ? 'blue' :
+                            d.role === 'r' ? 'red' : undefined
+                        );
                     }
-                    if (d.beta !== undefined) updatePaddle(d.beta, msgRole);
+                    if (d.beta !== undefined) updatePaddle(d.beta, d.role);
                 } catch(e) { /* ignore parse errors */ }
             };
             ws.onclose = () => { status.textContent = 'Disconnected'; /* do not log errors */ setTimeout(connect,3000); };

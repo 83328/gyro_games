@@ -9,22 +9,57 @@
     body { font-family: -apple-system, system-ui, sans-serif; padding: 0.6rem; margin:0; display:flex; flex-direction:column; align-items:stretch; gap:8px; background:#111; color:#fff }
   .controls{ display:flex; flex-direction:column; gap:8px; align-items:stretch }
     button { padding: 0.6rem 0.8rem; flex:1; border-radius:8px; border:none; font-weight:600 }
-  .roles{ display:flex; gap:6px; }
+  .roles{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; --cols:4; }
   /* color the role buttons to match players */
-  .roles button { color: #012; font-weight:700; border-radius:8px; }
+  /* Use a CSS variable --cols to control equal-width buttons for N visible columns */
+  .roles button { color: #012; font-weight:700; border-radius:8px; flex: 0 0 calc(100% / var(--cols) - 8px); min-width:88px; text-align:center }
   button[data-role="blue"]{ background:#4ea1ff; color:#042434 }
   button[data-role="red"]{ background:#ff6b6b; color:#3b0000 }
   button[data-role="yellow"]{ background:#ffd86b; color:#332900 }
   button[data-role="green"]{ background:#8fe58f; color:#042a04 }
+  button[data-role="orange"]{ background:#ff9f4d; color:#2b1300 }
+  button[data-role="purple"]{ background:#b58cff; color:#1f0533 }
+  button[data-role="cyan"]{ background:#4de6e6; color:#022525 }
+  button[data-role="magenta"]{ background:#ff6bff; color:#330033 }
   .roles button.selected{ outline:3px solid rgba(255,255,255,0.12); transform:translateY(-2px); box-shadow:0 6px 14px rgba(0,0,0,0.35); }
     @media (max-width:420px){ h2{font-size:16px} button{padding:10px 6px; font-size:14px} }
+  /* larger, more tappable player count select */
+  #transmitPlayerCount {
+    font-size: 1rem;
+    padding: 0.45rem 0.6rem;
+    min-width: 88px;
+    border-radius: 8px;
+    background: #1b1b1b;
+    color: #fff;
+    border: 1px solid #333;
+  }
+  /* thin visual spacer between selector and the start/stop row */
+  .spacer { height: 10px; width:100%; }
   </style>
 </head>
 <body>
-  <h2 style="margin:0;">Gyroscope Streamer</h2>
+  <h2 style="margin:0;">Pick your colour and press start</h2>
   <div class="controls">
     <div><span id="status">Idle</span></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end"><button id="startBtn">Start</button><button id="stopBtn" disabled>Stop</button></div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="color:#ddd;font-weight:600;margin-right:8px">Players:</label>
+        <select id="transmitPlayerCount" style="margin-right:8px">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+        </select>
+      </div>
+      <div class="spacer" aria-hidden="true"></div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+    </div>
   </div>
   <div style="height:100px;">&nbsp;</div>
   <div class="roles">
@@ -32,6 +67,10 @@
     <button id="roleRed" data-role="red">Red</button>
     <button id="roleYellow" data-role="yellow">Yellow</button>
     <button id="roleGreen" data-role="green">Green</button>
+    <button id="roleOrange" data-role="orange">Orange</button>
+    <button id="rolePurple" data-role="purple">Purple</button>
+    <button id="roleCyan" data-role="cyan">Cyan</button>
+    <button id="roleMagenta" data-role="magenta">Magenta</button>
   </div>
 
 <script>
@@ -107,8 +146,17 @@ function handleMotion(e) {
     ax: fmt(acc.x || 0),
     ay: fmt(acc.y || 0),
     az: fmt(acc.z || 0),
-    // send short role codes to reduce bandwidth: b/r/y/g
-    role: (role === 'blue' ? 'b' : (role === 'red' ? 'r' : (role === 'yellow' ? 'y' : (role === 'green' ? 'g' : role))))
+    // send short role codes to reduce bandwidth: b/r/y/g/o/p/c/m
+    role: (
+      role === 'blue' ? 'b' :
+      role === 'red' ? 'r' :
+      role === 'yellow' ? 'y' :
+      role === 'green' ? 'g' :
+      role === 'orange' ? 'o' :
+      role === 'purple' ? 'p' :
+      role === 'cyan' ? 'c' :
+      role === 'magenta' ? 'm' : role
+    )
   };
   const s = JSON.stringify(payload);
   if (socket && socket.readyState === WebSocket.OPEN) {
@@ -124,24 +172,81 @@ function handleMotion(e) {
 // role button handlers
 function applyRoleColor(r) {
   // highlight the selected role button and keep the rest neutral
-  const roles = ['blue','red','yellow','green'];
+  const roles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
   roles.forEach(roleName => {
     const btn = document.querySelector(`button[data-role="${roleName}"]`);
     if(!btn) return;
     if(roleName === r) btn.classList.add('selected'); else btn.classList.remove('selected');
   });
-  // preserve previous body color behavior for quick visual feedback
-  if (r === 'blue') { document.body.style.background = '#4ea1ff'; document.body.style.color = '#e6f4ff'; }
-  else if (r === 'red') { document.body.style.background = '#ff6b6b'; document.body.style.color = '#ffe6e6'; }
-  else if (r === 'yellow') { document.body.style.background = '#ffd86b'; document.body.style.color = '#332900'; }
-  else if (r === 'green') { document.body.style.background = '#8fe58f'; document.body.style.color = '#042a04'; }
-  else { document.body.style.background = ''; document.body.style.color = ''; }
+  // set the body background and pick an accessible text color based on luminance
+  const colorMap = {
+    blue: '#4ea1ff',
+    red: '#ff6b6b',
+    yellow: '#ffd86b',
+    green: '#8fe58f',
+    orange: '#ff9f4d',
+    purple: '#b58cff',
+    cyan: '#4de6e6',
+    magenta: '#ff6bff'
+  };
+  const bg = colorMap[r] || '';
+  document.body.style.background = bg;
+  // helper: convert hex -> RGB [r,g,b]
+  function hexToRgb(hex){
+    if(!hex) return null;
+    const h = hex.replace('#','');
+    const bigint = parseInt(h,16);
+    if(h.length === 6) return [(bigint>>16)&255, (bigint>>8)&255, bigint&255];
+    if(h.length === 3) return [parseInt(h[0]+h[0],16), parseInt(h[1]+h[1],16), parseInt(h[2]+h[2],16)];
+    return null;
+  }
+  // helper: relative luminance per WCAG
+  function luminance(rgb){
+    if(!rgb) return 0;
+    const srgb = rgb.map(v => v/255).map(c => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
+    return 0.2126*srgb[0] + 0.7152*srgb[1] + 0.0722*srgb[2];
+  }
+  const rgb = hexToRgb(bg);
+  const lum = luminance(rgb);
+  // threshold around 0.5 is a reasonable heuristic: light backgrounds get black text
+  if(rgb && lum > 0.5) document.body.style.color = '#000'; else if (rgb) document.body.style.color = '#fff';
+  if(!rgb){ document.body.style.color = ''; }
 }
 
 document.getElementById('roleBlue').addEventListener('click', () => { role='blue'; applyRoleColor('blue'); log('Role=blue'); });
 document.getElementById('roleRed').addEventListener('click', () => { role='red'; applyRoleColor('red'); log('Role=red'); });
 document.getElementById('roleYellow').addEventListener('click', () => { role='yellow'; applyRoleColor('yellow'); log('Role=yellow'); });
 document.getElementById('roleGreen').addEventListener('click', () => { role='green'; applyRoleColor('green'); log('Role=green'); });
+document.getElementById('roleOrange').addEventListener('click', () => { role='orange'; applyRoleColor('orange'); log('Role=orange'); });
+document.getElementById('rolePurple').addEventListener('click', () => { role='purple'; applyRoleColor('purple'); log('Role=purple'); });
+document.getElementById('roleCyan').addEventListener('click', () => { role='cyan'; applyRoleColor('cyan'); log('Role=cyan'); });
+document.getElementById('roleMagenta').addEventListener('click', () => { role='magenta'; applyRoleColor('magenta'); log('Role=magenta'); });
+
+// player count selector for transmitter: shows only the first N role buttons
+const transmitPlayerCount = document.getElementById('transmitPlayerCount');
+function updateRoleButtons(){
+  const n = parseInt(transmitPlayerCount.value, 10) || 2;
+  const order = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  order.forEach((r, idx) => {
+    const btn = document.querySelector(`button[data-role="${r}"]`);
+    if(!btn) return;
+    if(idx < n) btn.style.display = '';
+    else btn.style.display = 'none';
+  });
+  // update CSS column count so flex-basis keeps buttons equal width
+  const rolesContainer = document.querySelector('.roles');
+  if(rolesContainer) rolesContainer.style.setProperty('--cols', String(n));
+  // if the currently selected role is hidden, pick the first visible role
+  const visible = order.filter((r, idx) => idx < n);
+  if(!visible.includes(role)){
+    role = visible[0];
+    applyRoleColor(role);
+  }
+}
+transmitPlayerCount.addEventListener('change', updateRoleButtons);
+// initialize with 4 visible by default
+transmitPlayerCount.value = '4';
+updateRoleButtons();
 
 // keep latest deviceorientation around so we can include it with motion payloads
 window.addEventListener('deviceorientation', (ev) => {

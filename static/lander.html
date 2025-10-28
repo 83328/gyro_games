@@ -19,10 +19,14 @@
   <div class="hud">
     <label style="margin-left:8px">Players:
       <select id="playerCount" style="margin-left:6px">
-        <option value="2">2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
-      </select>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+        </select>
     </label>
     <button id="restart">Restart</button>
     <button id="fs">Fullscreen</button>
@@ -104,8 +108,8 @@ function groundYAt(x){
   return H-20;
 }
 
-// players state (dynamic based on selected player count). Roles in order: blue, red, yellow, green
-const ROLE_ORDER = ['blue','red','yellow','green'];
+// players state (dynamic based on selected player count). Roles in order: blue, red, yellow, green, orange, purple, cyan, magenta
+const ROLE_ORDER = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
 let players = {};
 let running = false; // whether physics/controls are active
 let _countdownTimer = null;
@@ -209,7 +213,7 @@ function drawGround(){
   // pads
   for(const [i,p] of pads.entries()){
     // pad colored by role
-    const color = p.role==='blue' ? '#4ea1ff' : p.role==='red' ? '#ff6b6b' : p.role==='yellow' ? '#ffd86b' : '#8fe58f';
+    const color = p.role==='blue' ? '#4ea1ff' : p.role==='red' ? '#ff6b6b' : p.role==='yellow' ? '#ffd86b' : p.role==='green' ? '#8fe58f' : p.role==='orange' ? '#ff9f4d' : p.role==='purple' ? '#b58cff' : p.role==='cyan' ? '#4de6e6' : '#ff6bff';
     ctx.fillStyle = color;
     ctx.fillRect(p.x - p.w/2, p.y-6, p.w, 10);
     ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x - p.w/2, p.y-6, p.w, 10);
@@ -239,7 +243,7 @@ function drawHUD(){
     const p = players[role];
     ctx.fillStyle='#333'; ctx.fillRect(W - fw - 10, fy, fw, fh);
     // color by role
-    const color = role==='blue' ? '#4ea1ff' : role==='red' ? '#ff6b6b' : role==='yellow' ? '#ffd86b' : '#8fe58f';
+    const color = role==='blue' ? '#4ea1ff' : role==='red' ? '#ff6b6b' : role==='yellow' ? '#ffd86b' : role==='green' ? '#8fe58f' : role==='orange' ? '#ff9f4d' : role==='purple' ? '#b58cff' : role==='cyan' ? '#4de6e6' : '#ff6bff';
     ctx.fillStyle = color; ctx.fillRect(W - fw - 10, fy, fw * (p.fuel/100), fh);
     fy += fh + 8;
   }
@@ -330,9 +334,18 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
-      // normalize short role codes (b/r/y/g -> blue/red/yellow/green)
+      // normalize short role codes (b/r/y/g/o/p/c/m -> blue/red/yellow/green/orange/purple/cyan/magenta)
       if(typeof d.role === 'string' && d.role.length === 1){
-        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' : d.role
+        );
       }
       if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
         if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
@@ -384,7 +397,7 @@ function frame(now){
   // draw all players in order
   const roleKeys = Object.keys(players);
   for(const role of roleKeys){
-    const color = role==='blue' ? '#4ea1ff' : role==='red' ? '#ff6b6b' : role==='yellow' ? '#ffd86b' : '#8fe58f';
+    const color = role==='blue' ? '#4ea1ff' : role==='red' ? '#ff6b6b' : role==='yellow' ? '#ffd86b' : role==='green' ? '#8fe58f' : role==='orange' ? '#ff9f4d' : role==='purple' ? '#b58cff' : role==='cyan' ? '#4de6e6' : '#ff6bff';
     drawLander(players[role], color);
   }
   drawHUD();

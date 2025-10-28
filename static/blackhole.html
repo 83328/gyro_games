@@ -33,6 +33,10 @@
       <option value="2">2 players</option>
       <option value="3">3 players</option>
       <option value="4">4 players</option>
+      <option value="5">5 players</option>
+      <option value="6">6 players</option>
+      <option value="7">7 players</option>
+      <option value="8">8 players</option>
     </select>
     <button id="newRound" style="margin-left:12px;display:none">New round</button>
     Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
@@ -403,7 +407,16 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       const d=JSON.parse(ev.data);
       if(!d||!d.role) return;
       if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' : d.role
+        );
       }
       if(!activeRoles.includes(d.role)) return;
       if(d.orientBeta!==undefined && d.orientGamma!==undefined){

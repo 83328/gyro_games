@@ -21,10 +21,18 @@
       <option value="2">2 players</option>
       <option value="3">3 players</option>
       <option value="4">4 players</option>
+      <option value="5">5 players</option>
+      <option value="6">6 players</option>
+      <option value="7">7 players</option>
+      <option value="8">8 players</option>
     </select>
     Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
-    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
-    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+      <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
+      <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+      <span id="orangeScoreContainer" style="display:none"> — Orange: <span id="sOrange">0</span></span>
+      <span id="purpleScoreContainer" style="display:none"> — Purple: <span id="sPurple">0</span></span>
+      <span id="cyanScoreContainer" style="display:none"> — Cyan: <span id="sCyan">0</span></span>
+      <span id="magentaScoreContainer" style="display:none"> — Magenta: <span id="sMagenta">0</span></span>
   </div>
   <canvas id="c" width="600" height="600"></canvas>
 <script>
@@ -33,6 +41,12 @@ const ctx = canvas.getContext('2d');
 const info = document.getElementById('info');
 const sBlue = document.getElementById('sBlue');
 const sRed = document.getElementById('sRed');
+const sYellowEl = document.getElementById('sYellow');
+const sGreenEl = document.getElementById('sGreen');
+const sOrange = document.getElementById('sOrange');
+const sPurple = document.getElementById('sPurple');
+const sCyan = document.getElementById('sCyan');
+const sMagenta = document.getElementById('sMagenta');
 
 // calibration and UI controls
 const ctrlContainer = document.createElement('div');
@@ -106,11 +120,14 @@ let players = {
   blue: {x:0,y:ROWS-1, px:0, py:0, vx:0, vy:0},
   red:  {x:COLS-1,y:0, px:0, py:0, vx:0, vy:0}
 };
-let scores = {blue:0, red:0};
-// optional players (created when playerCount >=3)
+let scores = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
+// optional players (created when playerCount increases)
 players.yellow = {x: Math.floor(COLS/2), y: ROWS-1, px:0, py:0, vx:0, vy:0};
 players.green  = {x: Math.floor(COLS/2), y: 0, px:0, py:0, vx:0, vy:0};
-scores.yellow = 0; scores.green = 0;
+players.orange = {x: Math.floor(COLS/2)-1, y: Math.floor(ROWS/2), px:0, py:0, vx:0, vy:0};
+players.purple = {x: Math.floor(COLS/2)+1, y: Math.floor(ROWS/2), px:0, py:0, vx:0, vy:0};
+players.cyan = {x: Math.floor(COLS/2), y: Math.floor(ROWS/2)-1, px:0, py:0, vx:0, vy:0};
+players.magenta = {x: Math.floor(COLS/2), y: Math.floor(ROWS/2)+1, px:0, py:0, vx:0, vy:0};
 
 const playerCountEl = document.createElement('select');
 // we'll use the DOM select already added in HTML; wire it below
@@ -165,7 +182,7 @@ function draw(){
       }
     }
   }
-  // draw goal squares (corners)
+  // draw goal squares (corners and additional for optional players)
   // Blue goal: top-right
   ctx.fillStyle='#0033aa'; ctx.fillRect((COLS-1)*cell.w,0,cell.w,cell.h);
   // Red goal: bottom-left
@@ -174,6 +191,11 @@ function draw(){
   if(activeRoles.includes('yellow')){ ctx.fillStyle='#ffd86b'; ctx.fillRect(0, 0, cell.w, cell.h); }
   // Green goal: bottom-right (opposite of green start at top-left)
   if(activeRoles.includes('green')){ ctx.fillStyle='#8fe58f'; ctx.fillRect((COLS-1)*cell.w, (ROWS-1)*cell.h, cell.w, cell.h); }
+  // Orange/Purple/Cyan/Magenta use mid-edges or center targets when present
+  if(activeRoles.includes('orange')){ ctx.fillStyle='#ffae42'; ctx.fillRect(Math.floor(COLS/2)*cell.w, 0, cell.w, cell.h); }
+  if(activeRoles.includes('purple')){ ctx.fillStyle='#b388ff'; ctx.fillRect(Math.floor(COLS/2)*cell.w, (ROWS-1)*cell.h, cell.w, cell.h); }
+  if(activeRoles.includes('cyan')){ ctx.fillStyle='#4deeea'; ctx.fillRect(0, Math.floor(ROWS/2)*cell.h, cell.w, cell.h); }
+  if(activeRoles.includes('magenta')){ ctx.fillStyle='#ff6bd6'; ctx.fillRect((COLS-1)*cell.w, Math.floor(ROWS/2)*cell.h, cell.w, cell.h); }
 
   // draw players as circles at pixel positions
   ctx.fillStyle='#4ea1ff';
@@ -181,12 +203,12 @@ function draw(){
   ctx.fillStyle='#ff6b6b';
   ctx.beginPath(); ctx.arc(players.red.px, players.red.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
   // optional players
-  if(activeRoles.includes('yellow')){
-    ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(players.yellow.px, players.yellow.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
-  }
-  if(activeRoles.includes('green')){
-    ctx.fillStyle='#8fe58f'; ctx.beginPath(); ctx.arc(players.green.px, players.green.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
-  }
+  if(activeRoles.includes('yellow')){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(players.yellow.px, players.yellow.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  if(activeRoles.includes('green')){ ctx.fillStyle='#8fe58f'; ctx.beginPath(); ctx.arc(players.green.px, players.green.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  if(activeRoles.includes('orange')){ ctx.fillStyle='#ffae42'; ctx.beginPath(); ctx.arc(players.orange.px, players.orange.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  if(activeRoles.includes('purple')){ ctx.fillStyle='#b388ff'; ctx.beginPath(); ctx.arc(players.purple.px, players.purple.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  if(activeRoles.includes('cyan')){ ctx.fillStyle='#4deeea'; ctx.beginPath(); ctx.arc(players.cyan.px, players.cyan.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  if(activeRoles.includes('magenta')){ ctx.fillStyle='#ff6bd6'; ctx.beginPath(); ctx.arc(players.magenta.px, players.magenta.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
 }
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
@@ -237,8 +259,12 @@ function checkGoal(role){
   const cx = Math.floor(p.px / cell.w), cy = Math.floor(p.py / cell.h);
   if(role==='blue' && cx===COLS-1 && cy===0){ scores.blue++; sBlue.textContent = scores.blue; appendLog('Blue scored!'); resetRound(); }
   if(role==='red' && cx===0 && cy===ROWS-1){ scores.red++; sRed.textContent = scores.red; appendLog('Red scored!'); resetRound(); }
-  if(role==='yellow' && activeRoles.includes('yellow') && cx===0 && cy===0){ scores.yellow++; document.getElementById('sYellow').textContent = scores.yellow; appendLog('Yellow scored!'); resetRound(); }
-  if(role==='green' && activeRoles.includes('green') && cx===COLS-1 && cy===ROWS-1){ scores.green++; document.getElementById('sGreen').textContent = scores.green; appendLog('Green scored!'); resetRound(); }
+  if(role==='yellow' && activeRoles.includes('yellow') && cx===0 && cy===0){ scores.yellow++; sYellowEl.textContent = scores.yellow; appendLog('Yellow scored!'); resetRound(); }
+  if(role==='green' && activeRoles.includes('green') && cx===COLS-1 && cy===ROWS-1){ scores.green++; sGreenEl.textContent = scores.green; appendLog('Green scored!'); resetRound(); }
+  if(role==='orange' && activeRoles.includes('orange') && cx===Math.floor(COLS/2) && cy===0){ scores.orange++; sOrange.textContent = scores.orange; appendLog('Orange scored!'); resetRound(); }
+  if(role==='purple' && activeRoles.includes('purple') && cx===Math.floor(COLS/2) && cy===ROWS-1){ scores.purple++; sPurple.textContent = scores.purple; appendLog('Purple scored!'); resetRound(); }
+  if(role==='cyan' && activeRoles.includes('cyan') && cx===0 && cy===Math.floor(ROWS/2)){ scores.cyan++; sCyan.textContent = scores.cyan; appendLog('Cyan scored!'); resetRound(); }
+  if(role==='magenta' && activeRoles.includes('magenta') && cx===COLS-1 && cy===Math.floor(ROWS/2)){ scores.magenta++; sMagenta.textContent = scores.magenta; appendLog('Magenta scored!'); resetRound(); }
 }
 
 function appendLog(msg){
@@ -251,12 +277,12 @@ function resetRound(){
   // corners: blue bottom-left, red top-right, yellow bottom-right, green top-left
   players.blue = {x:0,y:ROWS-1, px: (0+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
   players.red  = {x:COLS-1,y:0, px: (COLS-1+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
-  if(activeRoles.includes('yellow')){
-    players.yellow = {x:COLS-1,y:ROWS-1, px: (COLS-1+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
-  }
-  if(activeRoles.includes('green')){
-    players.green = {x:0,y:0, px: (0+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
-  }
+  if(activeRoles.includes('yellow')){ players.yellow = {x:COLS-1,y:ROWS-1, px: (COLS-1+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('green')){ players.green = {x:0,y:0, px: (0+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('orange')){ players.orange = {x:Math.floor(COLS/2), y:ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('purple')){ players.purple = {x:Math.floor(COLS/2), y:0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('cyan')){ players.cyan = {x:COLS-1, y:Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('magenta')){ players.magenta = {x:0, y:Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0}; }
   draw();
 }
 
@@ -272,12 +298,42 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
-      // map short role codes to full names
+      // map short role codes to full names (supports o/p/c/m)
       if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (d.role === 'b' ? 'blue' : (d.role === 'r' ? 'red' : (d.role === 'y' ? 'yellow' : (d.role === 'g' ? 'green' : d.role))));
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' :
+          d.role
+        );
       }
         // if orientation angles are provided, prefer them (more stable for tilt)
         if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
+        // ensure the players object has an entry for this role so handleTilt can operate
+        if(!players[d.role]){
+          // place sensible default grid starts (pixel positions will be updated by resize/reset as needed)
+          if(d.role === 'orange'){
+            // orange starts at bottom-middle (opposite its goal at top-middle)
+            players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
+          } else if(d.role === 'purple'){
+            // purple starts at top-middle (opposite its goal at bottom-middle)
+            players.purple = { x: Math.floor(COLS/2), y: 0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0 };
+          } else if(d.role === 'cyan'){
+            // cyan starts at right-middle (opposite its goal at left-middle)
+            players.cyan = { x: COLS-1, y: Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+          } else if(d.role === 'magenta'){
+            // magenta starts at left-middle (opposite its goal at right-middle)
+            players.magenta = { x: 0, y: Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+          } else {
+            const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
+            players[d.role] = { x: cx, y: cy, px: (cx+0.5)*cell.w, py: (cy+0.5)*cell.h, vx:0, vy:0 };
+          }
+        }
         if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
           orientationAvailable = true;
           lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
@@ -318,13 +374,20 @@ players.red.px = (COLS-1+0.5)*cell.w; players.red.py = (0+0.5)*cell.h;
 const playerCount = document.getElementById('playerCount');
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
+const orangeScoreContainer = document.getElementById('orangeScoreContainer');
+const purpleScoreContainer = document.getElementById('purpleScoreContainer');
+const cyanScoreContainer = document.getElementById('cyanScoreContainer');
+const magentaScoreContainer = document.getElementById('magentaScoreContainer');
 function updateActiveRoles(){
   const n = parseInt(playerCount.value, 10) || 2;
-  activeRoles = ['blue','red'];
-  if(n >= 3){ activeRoles.push('yellow'); yellowScoreContainer.style.display = ''; }
-  else { yellowScoreContainer.style.display = 'none'; }
-  if(n >= 4){ activeRoles.push('green'); greenScoreContainer.style.display = ''; }
-  else { greenScoreContainer.style.display = 'none'; }
+  const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
+  yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
+  greenScoreContainer.style.display = (n >= 4) ? '' : 'none';
+  orangeScoreContainer.style.display = (n >= 5) ? '' : 'none';
+  purpleScoreContainer.style.display = (n >= 6) ? '' : 'none';
+  cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
+  magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
   // reset positions for new roles
   resetRound();
 }
