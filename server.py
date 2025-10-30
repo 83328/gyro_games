@@ -19,6 +19,7 @@ async def websocket_handler(request):
     # Basic token check: require ?token=...
     token = request.rel_url.query.get('token')
     if token != AUTH_TOKEN:
+        print(f"[!] WebSocket auth failed from {request.remote} - token={token!r} expected={AUTH_TOKEN!r}")
         return web.Response(status=401, text='Unauthorized')
 
     ws = web.WebSocketResponse()
@@ -30,21 +31,37 @@ async def websocket_handler(request):
 
     try:
         async for msg in ws:
-            if msg.type == web.WSMsgType.TEXT:
-                # Try parse JSON
-                try:
-                    data = json.loads(msg.data)
-                    print("Gyro:", data)
-                    # Broadcast data to all connected clients
-                    for client in clients:
-                        if not client.closed:
-                            await client.send_json(data)
-                except Exception:
-                    print("Gyro (raw):", msg.data)
-            elif msg.type == web.WSMsgType.ERROR:
-                print('WebSocket connection closed with exception %s' % ws.exception())
+            try:
+                if msg.type == web.WSMsgType.TEXT:
+                    # Forward text frames unchanged to all clients
+                    print(f"[RX TEXT] from {peer}: {msg.data[:200]}")
+                    for client in list(clients):
+                        if client.closed:
+                            clients.discard(client)
+                            continue
+                        try:
+                            await client.send_str(msg.data)
+                        except Exception as e:
+                            print(f"[!] Failed to send TEXT to client {client}: {e}")
+                elif msg.type == web.WSMsgType.BINARY:
+                    # Forward binary frames unchanged
+                    print(f"[RX BINARY] from {peer}: {len(msg.data)} bytes")
+                    for client in list(clients):
+                        if client.closed:
+                            clients.discard(client)
+                            continue
+                        try:
+                            await client.send_bytes(msg.data)
+                        except Exception as e:
+                            print(f"[!] Failed to send BINARY to client {client}: {e}")
+                elif msg.type == web.WSMsgType.ERROR:
+                    print('WebSocket connection closed with exception %s' % ws.exception())
+                else:
+                    print(f"[RX] msg.type={msg.type} from {peer}")
+            except Exception as inner:
+                print(f"[!] Error processing message from {peer}: {inner}")
     finally:
-        print(f"[-] Client disconnected: {peer}")
+        print(f"[-] Client disconnected: {peer} code={getattr(ws, 'close_code', None)}")
         clients.discard(ws)  # Remove client on disconnect
 
     return ws

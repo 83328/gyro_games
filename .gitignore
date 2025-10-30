@@ -26,3 +26,6 @@ coverage.xml
 
 # Ignore node modules (if any JS)
 node_modules/
+
+# Ignore cloudflared credentials
+.cloudflared/*.json

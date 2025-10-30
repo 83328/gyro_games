@@ -295,10 +295,33 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto = (location.protocol==='https:')?'wss':'ws';
   const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ info.textContent='Connected'; };
-  ws.onmessage = (ev)=>{
+  // prefer ArrayBuffer for binary frames so we can decode uniformly
+  try{ ws.binaryType = 'arraybuffer'; }catch(e){}
+
+  ws.onopen = ()=>{
+    console.log('[maze] ws open', wsUrl);
+    info.textContent='Connected';
+  };
+
+  ws.onmessage = async (ev)=>{
     try{
-      const d = JSON.parse(ev.data);
+      // normalize payload to a string regardless of frame type
+      let payloadText = '';
+      if(ev.data instanceof ArrayBuffer){
+        payloadText = new TextDecoder().decode(ev.data);
+      } else if(typeof Blob !== 'undefined' && ev.data instanceof Blob){
+        // Blob -> text
+        try{ payloadText = await ev.data.text(); }catch(e){
+          // fallback to FileReader if .text() unavailable
+          payloadText = await new Promise((resolve, reject)=>{
+            const fr = new FileReader(); fr.onload = ()=>resolve(fr.result); fr.onerror = reject; fr.readAsText(ev.data);
+          });
+        }
+      } else {
+        payloadText = ev.data;
+      }
+
+      const d = JSON.parse(payloadText);
       if(!d || d.role==null) return;
       // map short role codes to full names (supports o/p/c/m)
       if(typeof d.role === 'string' && d.role.length===1){
@@ -314,55 +337,49 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
           d.role
         );
       }
-        // if orientation angles are provided, prefer them (more stable for tilt)
-        if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
-        // ensure the players object has an entry for this role so handleTilt can operate
-        if(!players[d.role]){
-          // place sensible default grid starts (pixel positions will be updated by resize/reset as needed)
-          if(d.role === 'orange'){
-            // orange starts at bottom-middle (opposite its goal at top-middle)
-            players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
-          } else if(d.role === 'purple'){
-            // purple starts at top-middle (opposite its goal at bottom-middle)
-            players.purple = { x: Math.floor(COLS/2), y: 0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0 };
-          } else if(d.role === 'cyan'){
-            // cyan starts at right-middle (opposite its goal at left-middle)
-            players.cyan = { x: COLS-1, y: Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
-          } else if(d.role === 'magenta'){
-            // magenta starts at left-middle (opposite its goal at right-middle)
-            players.magenta = { x: 0, y: Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
-          } else {
-            const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
-            players[d.role] = { x: cx, y: cy, px: (cx+0.5)*cell.w, py: (cy+0.5)*cell.h, vx:0, vy:0 };
-          }
+      // if orientation angles are provided, prefer them (more stable for tilt)
+      if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
+      // ensure the players object has an entry for this role so handleTilt can operate
+      if(!players[d.role]){
+        // place sensible default grid starts (pixel positions will be updated by resize/reset as needed)
+        if(d.role === 'orange'){
+          players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
+        } else if(d.role === 'purple'){
+          players.purple = { x: Math.floor(COLS/2), y: 0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0 };
+        } else if(d.role === 'cyan'){
+          players.cyan = { x: COLS-1, y: Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+        } else if(d.role === 'magenta'){
+          players.magenta = { x: 0, y: Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+        } else {
+          const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
+          players[d.role] = { x: cx, y: cy, px: (cx+0.5)*cell.w, py: (cy+0.5)*cell.h, vx:0, vy:0 };
         }
-        if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
-          orientationAvailable = true;
-          lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
-          // update rotState timestamp to avoid spurious rotationRate integration
-          if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:Date.now()};
-          rotState[d.role].ts = Date.now();
-          handleTilt(d.role, d.orientBeta, d.orientGamma);
-        } else if(d.beta!==undefined && d.gamma!==undefined){
-          // fallback to gyroscope rotation rates — integrate roughly into tilt-like signal
-          // integrate using timestamp deltas for better stability
-          const now = Date.now();
-          if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:now};
-          const state = rotState[d.role];
-          const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02; // seconds
-          state.ts = now;
-          // d.beta/d.gamma are rotation rates (deg/s) — integrate to approximate tilt
-          state.b += (d.beta || 0) * dt;
-          state.g += (d.gamma || 0) * dt;
-          // decay to avoid unbounded drift
-          state.b *= 0.995; state.g *= 0.995;
-          // expose an estimated orientation for debug
-          lastDeviceOrientation = { beta: state.b, gamma: state.g };
-          handleTilt(d.role, state.b, state.g);
-        }
-    }catch(e){}
+      }
+      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
+        orientationAvailable = true;
+        lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
+        if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:Date.now()};
+        rotState[d.role].ts = Date.now();
+        handleTilt(d.role, d.orientBeta, d.orientGamma);
+      } else if(d.beta!==undefined && d.gamma!==undefined){
+        const now = Date.now();
+        if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:now};
+        const state = rotState[d.role];
+        const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02; // seconds
+        state.ts = now;
+        state.b += (d.beta || 0) * dt;
+        state.g += (d.gamma || 0) * dt;
+        state.b *= 0.995; state.g *= 0.995;
+        lastDeviceOrientation = { beta: state.b, gamma: state.g };
+        handleTilt(d.role, state.b, state.g);
+      }
+    }catch(err){
+      console.error('[maze] Failed to handle ws message', err, ev.data);
+    }
   };
-  ws.onclose = ()=>{ info.textContent='Disconnected'; setTimeout(()=>location.reload(),2000); };
+
+  ws.onerror = (err)=>{ console.error('[maze] websocket error', err); info.textContent='WebSocket error'; };
+  ws.onclose = (ev)=>{ console.warn('[maze] websocket closed', ev); info.textContent='Disconnected'; /* don't auto-reload; keep page for debugging */ };
 }).catch(e=>{ info.textContent='No backend /api/token'; });
 
 // init
