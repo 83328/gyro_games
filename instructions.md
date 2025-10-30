@@ -17,7 +17,7 @@ python3 ./server.py --host 0.0.0.0 --port 8080 --static ./static
 ## Start cloudflared with the following command
 ```./run.sh```
 
-When cloudflared is running, `games.arthur.limpens.com` will route to your local server.
+When cloudflared is running, `games.arthurlimpens.com` will route to your local server.
 
 ## Notes / troubleshooting
 - Ensure the credentials JSON for the named tunnel exists under `~/.cloudflared` and the `credentials-file` path in the env file points to it.
