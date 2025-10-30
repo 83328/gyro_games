@@ -124,6 +124,12 @@ function openSocket() {
 
 function handleMotion(e) {
   if (!listening) return;
+  // simple throttle: limit to ~20Hz (50ms)
+  const now = Date.now();
+  if (!window._lastGyroSent) window._lastGyroSent = 0;
+  const MIN_SEND_MS = 100;
+  if (now - window._lastGyroSent < MIN_SEND_MS) return;
+  window._lastGyroSent = now;
   const r = e.rotationRate || {};
   const acc = e.acceleration || e.accelerationIncludingGravity || {};
   function fmt(v){

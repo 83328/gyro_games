@@ -84,6 +84,8 @@ calibBtn.addEventListener('click', ()=>{
 // Maze grid
 const COLS = 15, ROWS = 15;
 let cell = {w: 0, h: 0};
+// multiplier to scale how fast dots move (1 = default). Change this value in code to tune speed.
+const SPEED_MULTIPLIER = 5; // <- set desired multiplier here
 let MAX_SPEED = 0;
 
 function resizeCanvasToDisplay(){
@@ -100,7 +102,7 @@ function resizeCanvasToDisplay(){
   canvas.height = Math.min(availH, 1200);
   cell.w = canvas.width / COLS;
   cell.h = canvas.height / ROWS;
-  MAX_SPEED = Math.min(cell.w, cell.h) * 6;
+  MAX_SPEED = Math.min(cell.w, cell.h) * 6 * SPEED_MULTIPLIER;
   // update player pixel positions from grid coords if players exist
   if(typeof players !== 'undefined' && players){
     for(const k of Object.keys(players)){
