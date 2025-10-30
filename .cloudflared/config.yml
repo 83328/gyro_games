@@ -1,0 +1,8 @@
+tunnel: 81242c3b-f521-48ed-b382-42d2b94ba679
+credentials-file: /home/alimpens/.cloudflared/81242c3b-f521-48ed-b382-42d2b94ba679.json
+
+ingress:
+  - hostname: games.arthur.limpens.com
+    service: http://localhost:8080
+  - service: http_status:404
+

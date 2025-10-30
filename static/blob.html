@@ -216,6 +216,15 @@ function step(dt){
     if(p.x + rad > WIDTH){ p.x = WIDTH - rad; p.vx *= -0.6; }
     if(p.y - rad < 0){ p.y = rad; p.vy *= -0.6; }
     if(p.y + rad > HEIGHT){ p.y = HEIGHT - rad; p.vy *= -0.6; }
+    // small anti-stuck nudge: if the blob slowed to near-zero and is touching an edge, push it inward
+    const pSpeed = Math.hypot(p.vx, p.vy);
+    if(pSpeed < 6){
+      const nudge = 24 + Math.random()*36;
+      if(p.x - rad <= 1) p.vx = Math.abs(p.vx) + nudge;
+      if(p.x + rad >= WIDTH - 1) p.vx = - (Math.abs(p.vx) + nudge);
+      if(p.y - rad <= 1) p.vy = Math.abs(p.vy) + nudge;
+      if(p.y + rad >= HEIGHT - 1) p.vy = - (Math.abs(p.vy) + nudge);
+    }
     // smooth displayed area for animation
     p.displayArea += (p.area - p.displayArea) * Math.min(1, dt*6);
   }
@@ -239,6 +248,15 @@ function step(dt){
     if(n.x + rad > WIDTH){ n.x = WIDTH - rad; n.vx *= -0.6; }
     if(n.y - rad < 0){ n.y = rad; n.vy *= -0.6; }
     if(n.y + rad > HEIGHT){ n.y = HEIGHT - rad; n.vy *= -0.6; }
+    // prevent neutrals from sticking to edges/corners: if velocity is very small after bounce and position is near boundary, give a randomized inward nudge
+    const nSpeed = Math.hypot(n.vx, n.vy);
+    if(nSpeed < 8){
+      const nudge = 20 + Math.random()*40;
+      if(n.x - rad <= 1) n.vx = Math.abs(n.vx) + nudge;
+      if(n.x + rad >= WIDTH - 1) n.vx = - (Math.abs(n.vx) + nudge);
+      if(n.y - rad <= 1) n.vy = Math.abs(n.vy) + nudge;
+      if(n.y + rad >= HEIGHT - 1) n.vy = - (Math.abs(n.vy) + nudge);
+    }
     n.displayArea += (n.area - n.displayArea) * Math.min(1, dt*4);
   }
   // collisions and eating
