@@ -116,6 +116,9 @@ function resizeCanvasToDisplay(){
   // arena centered in canvas with slight margin
   arena.x = canvas.width/2; arena.y = canvas.height/2; arena.radius = Math.min(canvas.width, canvas.height)/2 - 20;
   MAX_SPEED = Math.max(120, arena.radius * 0.6);
+  // responsive minimum arena radius so shrink stops at a proportion of the canvas size
+  // store as property on arena for use in the frame loop
+  arena.minRadius = Math.max(64, Math.min(canvas.width, canvas.height) * 0.18);
   // reposition players relative to arena center if they exist
   if(players){
     const startPositions = [
@@ -352,8 +355,9 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 let last=performance.now();
 function frame(now){
   const dt=Math.min(40,now-last)/1000; last=now;
-  // shrink arena twice as fast
-  arena.radius = Math.max(120, arena.radius - dt*3.0 * SPEED_MULTIPLIER); // faster shrink scaled
+  // shrink arena twice as fast (but not below responsive minimum)
+  const minR = (arena && arena.minRadius) ? arena.minRadius : 120;
+  arena.radius = Math.max(minR, arena.radius - dt*3.0 * SPEED_MULTIPLIER); // faster shrink scaled
   // physics
   for(const role of activeRoles){
     const p=players[role];

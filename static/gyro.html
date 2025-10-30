@@ -124,7 +124,7 @@ function openSocket() {
 
 function handleMotion(e) {
   if (!listening) return;
-  // simple throttle: limit to ~20Hz (50ms)
+  // simple throttle: limit to ~10Hz (100ms)
   const now = Date.now();
   if (!window._lastGyroSent) window._lastGyroSent = 0;
   const MIN_SEND_MS = 100;
