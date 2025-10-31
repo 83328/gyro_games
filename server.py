@@ -14,6 +14,7 @@ WS_URL = os.environ.get('WS_URL')
 
 # Store all connected WebSocket clients
 clients = set()
+message_count = 0  # Counter for throttled logging
 
 async def websocket_handler(request):
     # Basic token check: require ?token=...
@@ -34,7 +35,14 @@ async def websocket_handler(request):
             try:
                 if msg.type == web.WSMsgType.TEXT:
                     # Forward text frames unchanged to all clients
-                    print(f"[RX TEXT] from {peer}: {msg.data[:200]}")
+                    # print(f"[RX TEXT] from {peer}: {msg.data[:200]}")  # Commented out for performance
+                    
+                    # Optional: throttled logging (every 50th message)
+                    global message_count
+                    message_count += 1
+                    if message_count % 50 == 0:
+                        print(f"[RX TEXT #{message_count}] from {peer}: {msg.data[:100]}...")
+                    
                     for client in list(clients):
                         if client.closed:
                             clients.discard(client)
