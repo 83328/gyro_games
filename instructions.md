@@ -19,10 +19,6 @@ python3 ./server.py --host 0.0.0.0 --port 8080 --static ./static
 
 When cloudflared is running, `games.arthurlimpens.com` will route to your local server.
 
-## Notes / troubleshooting
-- Ensure the credentials JSON for the named tunnel exists under `~/.cloudflared` and the `credentials-file` path in the env file points to it.
-
-Originally we used ngrok to create a tunnel:
-```
-~/ngrok http 8080
-```
+## Stop the server and cloudflared
+- To stop the server, press `CTRL + C` in the terminal where the server is running.
+- To stop cloudflared, press `CTRL + C` in the terminal where cloudflared is running, or use (sudo) pkill cloudflared.
