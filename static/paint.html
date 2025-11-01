@@ -1,0 +1,346 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Paint</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #0a0a0a;
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  canvas {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+  #info { margin: 8px; font-size: 1.2em; }
+  #scores { margin: 8px; }
+</style>
+</head>
+<body>
+  <h1>Paint</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">
+    <label for="playerCount" style="font-weight:600;margin-right:4px;">Players:</label>
+    <select id="playerCount" style="margin-right:8px">
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+      <option value="6">6</option>
+      <option value="7">7</option>
+      <option value="8">8</option>
+    </select>
+    <div class="role">Blue <span id="sBlue">0</span></div>
+    <div class="role">Red <span id="sRed">0</span></div>
+    <span id="yellowScoreContainer" class="role" style="display:none">Yellow <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" class="role" style="display:none">Green <span id="sGreen">0</span></span>
+    <span id="orangeScoreContainer" class="role" style="display:none">Orange <span id="sOrange">0</span></span>
+    <span id="purpleScoreContainer" class="role" style="display:none">Purple <span id="sPurple">0</span></span>
+    <span id="cyanScoreContainer" class="role" style="display:none">Cyan <span id="sCyan">0</span></span>
+    <span id="magentaScoreContainer" class="role" style="display:none">Magenta <span id="sMagenta">0</span></span>
+    <button id="restart" style="margin-left:6px">Restart</button>
+    <button id="fs" style="margin-left:6px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
+  </div>
+  <canvas id="c" width="600" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const playerCountSel = document.getElementById('playerCount');
+const yellowScoreContainer = document.getElementById('yellowScoreContainer');
+const greenScoreContainer = document.getElementById('greenScoreContainer');
+const orangeScoreContainer = document.getElementById('orangeScoreContainer');
+const purpleScoreContainer = document.getElementById('purpleScoreContainer');
+const cyanScoreContainer = document.getElementById('cyanScoreContainer');
+const magentaScoreContainer = document.getElementById('magentaScoreContainer');
+const sBlue = document.getElementById('sBlue');
+const sRed = document.getElementById('sRed');
+const sYellow = document.getElementById('sYellow');
+const sGreen = document.getElementById('sGreen');
+const sOrange = document.getElementById('sOrange');
+const sPurple = document.getElementById('sPurple');
+const sCyan = document.getElementById('sCyan');
+const sMagenta = document.getElementById('sMagenta');
+
+const colors = {
+  blue: '#4ea1ff',
+  red: '#ff6b6b',
+  yellow: '#ffd86b',
+  green: '#8fe58f',
+  orange: '#ffae42',
+  purple: '#b388ff',
+  cyan: '#4deeea',
+  magenta: '#ff6bd6'
+};
+let ws = null;
+let activeRoles = ['blue','red'];
+let scores = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
+let players = {};
+let paintField;
+const GRID_SIZE = 10;
+let PIX_SIZE = Math.floor(canvas.width / GRID_SIZE);
+let FIELD_COLS = GRID_SIZE;
+let FIELD_ROWS = GRID_SIZE;
+
+// Initialize empty field
+function initField() {
+  PIX_SIZE = Math.floor(canvas.width / GRID_SIZE);
+  FIELD_COLS = GRID_SIZE;
+  FIELD_ROWS = GRID_SIZE;
+  paintField = Array(FIELD_ROWS).fill(0).map(() => Array(FIELD_COLS).fill(''));
+}
+
+function initPlayers() {
+  const n = parseInt(playerCountSel.value, 10);
+  const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
+  yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
+  greenScoreContainer.style.display = (n >= 4) ? '' : 'none';
+  orangeScoreContainer.style.display = (n >= 5) ? '' : 'none';
+  purpleScoreContainer.style.display = (n >= 6) ? '' : 'none';
+  cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
+  magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
+  players = {};
+  // spawn positions: spread out in grid
+  for (let i=0;i<activeRoles.length;i++) {
+    const role = activeRoles[i];
+    // place each player in a different grid cell
+    const col = i % GRID_SIZE;
+    const row = Math.floor(i / GRID_SIZE);
+    players[role] = {
+      gridX: col,
+      gridY: row,
+      x: col * PIX_SIZE + PIX_SIZE/2,
+      y: row * PIX_SIZE + PIX_SIZE/2,
+      vx: 0, vy: 0
+    };
+  }
+  initField();
+  scores = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
+  sBlue.textContent = 0;
+  sRed.textContent = 0;
+  sYellow.textContent = 0;
+  sGreen.textContent = 0;
+  if(sOrange) sOrange.textContent = 0;
+  if(sPurple) sPurple.textContent = 0;
+  if(sCyan) sCyan.textContent = 0;
+  if(sMagenta) sMagenta.textContent = 0;
+}
+initPlayers();
+playerCountSel.addEventListener('change', initPlayers);
+
+function handleTilt(role, beta, gamma) {
+  const p = players[role]; if(!p) return;
+  // pixelated movement: move one cell per tilt
+  let dx = 0, dy = 0;
+  if (Math.abs(gamma) > Math.abs(beta)) {
+    dx = gamma > 10 ? 1 : gamma < -10 ? -1 : 0;
+  }
+  if (Math.abs(beta) > Math.abs(gamma)) {
+    dy = beta > 10 ? 1 : beta < -10 ? -1 : 0;
+  }
+  // move in grid
+  let newX = Math.max(0, Math.min(GRID_SIZE-1, p.gridX + dx));
+  let newY = Math.max(0, Math.min(GRID_SIZE-1, p.gridY + dy));
+  if (newX !== p.gridX || newY !== p.gridY) {
+    p.gridX = newX;
+    p.gridY = newY;
+    p.x = p.gridX * PIX_SIZE + PIX_SIZE/2;
+    p.y = p.gridY * PIX_SIZE + PIX_SIZE/2;
+  }
+}
+
+function update(dt) {
+  if(!roundActive) return;
+  // paint the cell for each player
+  for (const role of activeRoles) {
+    const p = players[role];
+    if(p.gridX>=0 && p.gridX<FIELD_COLS && p.gridY>=0 && p.gridY<FIELD_ROWS){
+      paintField[p.gridY][p.gridX] = role;
+    }
+  }
+}
+
+function draw() {
+  // draw field
+  for (let r=0; r<FIELD_ROWS; r++) {
+    for (let c=0; c<FIELD_COLS; c++) {
+      const owner = paintField[r][c];
+      if (owner) {
+        ctx.fillStyle = colors[owner];
+        ctx.fillRect(c*PIX_SIZE, r*PIX_SIZE, PIX_SIZE, PIX_SIZE);
+      }
+    }
+  }
+  // draw players as square brushes
+  for (const role of activeRoles) {
+    const p = players[role];
+    ctx.fillStyle = colors[role];
+    ctx.fillRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
+  }
+}
+
+function tallyScores() {
+  const count = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
+  for (let r=0; r<FIELD_ROWS; r++) {
+    for (let c=0; c<FIELD_COLS; c++) {
+      const owner = paintField[r][c];
+      if (owner && count[owner]!==undefined) count[owner]++;
+    }
+  }
+  scores = count;
+  sBlue.textContent = scores.blue;
+  sRed.textContent = scores.red;
+  sYellow.textContent = scores.yellow;
+  sGreen.textContent = scores.green;
+  if(sOrange) sOrange.textContent = scores.orange;
+  if(sPurple) sPurple.textContent = scores.purple;
+  if(sCyan) sCyan.textContent = scores.cyan;
+  if(sMagenta) sMagenta.textContent = scores.magenta;
+}
+
+function loop(now) {
+  const dt = 1/60;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+setInterval(tallyScores, 2000); // update scores every 2s
+
+// --- Timer and overlay logic ---
+let roundTime = 60; // seconds
+let timeLeft = roundTime;
+let timerInterval = null;
+let roundActive = true;
+
+// Create overlay for winner
+const winOverlay = document.createElement('div');
+winOverlay.style.position = 'fixed';
+winOverlay.style.left = '0';
+winOverlay.style.top = '0';
+winOverlay.style.width = '100%';
+winOverlay.style.height = '100%';
+winOverlay.style.display = 'none';
+winOverlay.style.alignItems = 'center';
+winOverlay.style.justifyContent = 'center';
+winOverlay.style.zIndex = 9998;
+winOverlay.style.color = '#001';
+winOverlay.style.fontFamily = 'Arial, Helvetica, sans-serif';
+winOverlay.style.fontSize = '48px';
+winOverlay.style.fontWeight = '700';
+winOverlay.style.pointerEvents = 'none';
+winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
+document.body.appendChild(winOverlay);
+
+function showWinOverlay(role) {
+  winOverlay.style.background = colors[role] || '#fff';
+  winOverlay.textContent = `${role.charAt(0).toUpperCase()+role.slice(1)} wins!`;
+  winOverlay.style.display = 'flex';
+  setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
+}
+
+function startRoundTimer() {
+  timeLeft = roundTime;
+  roundActive = true;
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    timeLeft--;
+    info.textContent = `Time left: ${timeLeft}s`;
+    if(timeLeft <= 0) {
+      clearInterval(timerInterval);
+      endRound();
+    }
+  }, 1000);
+  info.textContent = `Time left: ${timeLeft}s`;
+}
+
+function endRound() {
+  roundActive = false;
+  tallyScores();
+  // Find winner(s)
+  let maxScore = -1, winners = [];
+  for(const r of activeRoles) {
+    if(scores[r] > maxScore) { maxScore = scores[r]; winners = [r]; }
+    else if(scores[r] === maxScore) { winners.push(r); }
+  }
+  if(winners.length === 1) {
+    showWinOverlay(winners[0]);
+    info.textContent = `${winners[0].charAt(0).toUpperCase()+winners[0].slice(1)} wins!`;
+  } else {
+    winOverlay.style.background = '#fff';
+    winOverlay.textContent = `Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}!`;
+    winOverlay.style.display = 'flex';
+    info.textContent = `Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}`;
+    setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
+  }
+}
+
+// Restart button logic
+document.getElementById('restart').addEventListener('click', ()=>{
+  initPlayers();
+  initField(); // ensure field is cleared between rounds
+  roundActive = true;
+  startRoundTimer();
+  winOverlay.style.display = 'none';
+});
+
+// Fullscreen button logic
+document.getElementById('fs').addEventListener('click', ()=>{
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen?.();
+  } else {
+    document.exitFullscreen?.();
+  }
+});
+
+// Start timer on load
+startRoundTimer();
+
+// WebSocket hookup
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token = data.token;
+  const proto = (location.protocol==='https:')?'wss':'ws';
+  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws = new WebSocket(wsUrl);
+  ws.onopen = ()=> info.textContent = 'Connected';
+  ws.onmessage = ev => {
+    try {
+      const d = JSON.parse(ev.data);
+      if (!d || !d.role) return;
+      // Normalize short role codes to full names
+      if (typeof d.role === 'string' && d.role.length === 1) {
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' :
+          d.role
+        );
+      }
+      if (!activeRoles.includes(d.role)) return;
+      if (d.orientBeta!==undefined && d.orientGamma!==undefined) {
+        handleTilt(d.role, d.orientBeta, d.orientGamma);
+      } else if (d.beta!==undefined && d.gamma!==undefined) {
+        handleTilt(d.role, d.beta, d.gamma);
+      }
+    } catch(e){}
+  };
+  ws.onclose = ()=>{ info.textContent='Disconnected'; setTimeout(()=>location.reload(),2000); };
+}).catch(e=>{ info.textContent='No backend /api/token'; });
+</script>
+</body>
+</html>
