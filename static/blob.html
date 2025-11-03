@@ -367,7 +367,15 @@ function updateHudSizes(){
       blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:'sGreenSize',
       orange:'sOrangeSize', purple:'sPurpleSize', cyan:'sCyanSize', magenta:'sMagentaSize'
     };
-    for(const r of ROLES){ const pct = Math.round((players[r].displayArea/total)*100); const el = document.getElementById(ids[r]); if(el) el.textContent = String(pct); }
+    for(const r of ROLES){
+      const pct = Math.round((players[r].displayArea/total)*100);
+      const el = document.getElementById(ids[r]);
+      if(el) {
+        el.textContent = String(pct);
+        // Set color of parent .role div
+        if(el.parentElement) el.parentElement.style.color = COLORS[r];
+      }
+    }
   }catch(e){}
 }
 

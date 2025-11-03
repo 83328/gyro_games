@@ -451,6 +451,19 @@ function updateActiveRoles(){
   purpleScoreContainer.style.display = (n >= 6) ? '' : 'none';
   cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
   magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
+  // Set score colors in HUD
+  const roleColors = {
+    blue: '#4ea1ff', red: '#ff6b6b', yellow: '#ffd86b', green: '#8fe58f',
+    orange: '#ffae42', purple: '#b388ff', cyan: '#4deeea', magenta: '#ff6bd6'
+  };
+  const ids = {
+    blue: sBlue, red: sRed, yellow: sYellowEl, green: sGreenEl,
+    orange: sOrange, purple: sPurple, cyan: sCyan, magenta: sMagenta
+  };
+  for(const role of Object.keys(ids)){
+    const el = ids[role];
+    if(el && el.parentElement) el.parentElement.style.color = roleColors[role];
+  }
   // reset positions for new roles
   resetRound();
 }

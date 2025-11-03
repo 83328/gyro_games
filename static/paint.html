@@ -38,8 +38,8 @@
       <option value="7">7</option>
       <option value="8">8</option>
     </select>
-    <div class="role">Blue <span id="sBlue">0</span></div>
-    <div class="role">Red <span id="sRed">0</span></div>
+  <span id="blueScoreContainer" class="role">Blue <span id="sBlue">0</span></span>
+  <span id="redScoreContainer" class="role">Red <span id="sRed">0</span></span>
     <span id="yellowScoreContainer" class="role" style="display:none">Yellow <span id="sYellow">0</span></span>
     <span id="greenScoreContainer" class="role" style="display:none">Green <span id="sGreen">0</span></span>
     <span id="orangeScoreContainer" class="role" style="display:none">Orange <span id="sOrange">0</span></span>
@@ -143,10 +143,11 @@ function handleTilt(role, beta, gamma) {
   // pixelated movement: move one cell per tilt
   let dx = 0, dy = 0;
   if (Math.abs(gamma) > Math.abs(beta)) {
-    dx = gamma > 10 ? 1 : gamma < -10 ? -1 : 0;
+    dx = gamma > 5 ? 1 : gamma < -5 ? -1 : 0;
   }
+  // REVERSE up/down controls: tilting up moves marker down, tilting down moves marker up
   if (Math.abs(beta) > Math.abs(gamma)) {
-    dy = beta > 10 ? 1 : beta < -10 ? -1 : 0;
+    dy = beta > 5 ? -1 : beta < -5 ? 1 : 0;
   }
   // move in grid
   let newX = Math.max(0, Math.min(GRID_SIZE-1, p.gridX + dx));
@@ -165,7 +166,17 @@ function update(dt) {
   for (const role of activeRoles) {
     const p = players[role];
     if(p.gridX>=0 && p.gridX<FIELD_COLS && p.gridY>=0 && p.gridY<FIELD_ROWS){
-      paintField[p.gridY][p.gridX] = role;
+      // Gradual fill: store fill progress per cell per player
+      if(!paintField[p.gridY][p.gridX] || typeof paintField[p.gridY][p.gridX] === 'string') {
+        // Start gradual fill
+        paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
+      } else if(paintField[p.gridY][p.gridX].owner === role && paintField[p.gridY][p.gridX].progress < 1) {
+        // Continue filling
+        paintField[p.gridY][p.gridX].progress = Math.min(1, paintField[p.gridY][p.gridX].progress + 0.2);
+      } else if(paintField[p.gridY][p.gridX].owner !== role) {
+        // Overwrite with new owner, start gradual fill
+        paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
+      }
     }
   }
 }
@@ -174,18 +185,46 @@ function draw() {
   // draw field
   for (let r=0; r<FIELD_ROWS; r++) {
     for (let c=0; c<FIELD_COLS; c++) {
-      const owner = paintField[r][c];
-      if (owner) {
+      const cell = paintField[r][c];
+      if (cell) {
+        let owner, progress, entryDir;
+        if(typeof cell === 'string') {
+          owner = cell; progress = 1; entryDir = {dx:0,dy:0};
+        } else {
+          owner = cell.owner; progress = cell.progress; entryDir = cell.entryDir || {dx:0,dy:0};
+        }
         ctx.fillStyle = colors[owner];
-        ctx.fillRect(c*PIX_SIZE, r*PIX_SIZE, PIX_SIZE, PIX_SIZE);
+        // Gradual fill: fill from entry side
+        let x = c*PIX_SIZE, y = r*PIX_SIZE;
+        let w = PIX_SIZE, h = PIX_SIZE;
+        if(progress < 1) {
+          if(entryDir.dx === 1) { // entered from left
+            ctx.fillRect(x, y, w*progress, h);
+          } else if(entryDir.dx === -1) { // entered from right
+            ctx.fillRect(x+w-w*progress, y, w*progress, h);
+          } else if(entryDir.dy === 1) { // entered from top
+            ctx.fillRect(x, y, w, h*progress);
+          } else if(entryDir.dy === -1) { // entered from bottom
+            ctx.fillRect(x, y+h-h*progress, w, h*progress);
+          } else {
+            ctx.fillRect(x, y, w*progress, h); // default left to right
+          }
+        } else {
+          ctx.fillRect(x, y, w, h);
+        }
       }
     }
   }
-  // draw players as square brushes
+  // draw players as square brushes, always on top
   for (const role of activeRoles) {
     const p = players[role];
+    ctx.save();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
     ctx.fillStyle = colors[role];
     ctx.fillRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
+    ctx.strokeRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
+    ctx.restore();
   }
 }
 
@@ -193,29 +232,58 @@ function tallyScores() {
   const count = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
   for (let r=0; r<FIELD_ROWS; r++) {
     for (let c=0; c<FIELD_COLS; c++) {
-      const owner = paintField[r][c];
-      if (owner && count[owner]!==undefined) count[owner]++;
+      const cell = paintField[r][c];
+      let owner = null;
+      if (typeof cell === 'string') {
+        owner = cell;
+      } else if (cell && typeof cell === 'object' && cell.owner) {
+        owner = cell.owner;
+      }
+      if (owner && count[owner] !== undefined) count[owner]++;
     }
   }
   scores = count;
-  sBlue.textContent = scores.blue;
-  sRed.textContent = scores.red;
-  sYellow.textContent = scores.yellow;
-  sGreen.textContent = scores.green;
-  if(sOrange) sOrange.textContent = scores.orange;
-  if(sPurple) sPurple.textContent = scores.purple;
-  if(sCyan) sCyan.textContent = scores.cyan;
-  if(sMagenta) sMagenta.textContent = scores.magenta;
+  // Always show all active player scores
+  for (const role of activeRoles) {
+    const scoreSpan = {
+      blue: sBlue,
+      red: sRed,
+      yellow: sYellow,
+      green: sGreen,
+      orange: sOrange,
+      purple: sPurple,
+      cyan: sCyan,
+      magenta: sMagenta
+    }[role];
+    if (scoreSpan) scoreSpan.textContent = scores[role];
+    // Show score container for all active roles and set color
+    const containerId = role + 'ScoreContainer';
+    const container = document.getElementById(containerId.charAt(0).toUpperCase() + containerId.slice(1));
+    if (container) {
+      container.style.display = '';
+      container.style.color = colors[role];
+    }
+  }
+  // Hide unused score containers
+  const allRoles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  for (const role of allRoles) {
+    if (!activeRoles.includes(role)) {
+      const containerId = role + 'ScoreContainer';
+      const container = document.getElementById(containerId.charAt(0).toUpperCase() + containerId.slice(1));
+      if (container) container.style.display = 'none';
+    }
+  }
 }
 
 function loop(now) {
   const dt = 1/60;
   update(dt);
+  tallyScores(); // update scores after every update
   draw();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-setInterval(tallyScores, 2000); // update scores every 2s
+// setInterval(tallyScores, 2000); // update scores every 2s (no longer needed)
 
 // --- Timer and overlay logic ---
 let roundTime = 60; // seconds
@@ -288,10 +356,11 @@ function endRound() {
 // Restart button logic
 document.getElementById('restart').addEventListener('click', ()=>{
   initPlayers();
-  initField(); // ensure field is cleared between rounds
+  // initPlayers already calls initField
   roundActive = true;
   startRoundTimer();
   winOverlay.style.display = 'none';
+  draw(); // force redraw to clear field immediately
 });
 
 // Fullscreen button logic

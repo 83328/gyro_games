@@ -1,0 +1,357 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Asteroid Sweepers</title>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: radial-gradient(circle at center, #000010 0%, #000 100%);
+    color: #eee;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  canvas {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+  #info { margin: 8px; font-size: 1.2em; }
+  #scores { margin: 8px; text-align: center; }
+  #scores span { margin: 0 4px; }
+</style>
+</head>
+<body>
+  <h1>Asteroid Sweepers</h1>
+  <div id="info">Connecting...</div>
+  <div id="scores">
+    Players:
+    <select id="playerCount" style="margin:0 8px">
+      <option value="2">2 players</option>
+      <option value="3">3 players</option>
+      <option value="4">4 players</option>
+      <option value="5">5 players</option>
+      <option value="6">6 players</option>
+      <option value="7">7 players</option>
+      <option value="8">8 players</option>
+    </select>
+    <button id="restart" style="margin-left:8px">Restart</button>
+    <div id="scoreDisplay"></div>
+  </div>
+  <canvas id="c" width="800" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const playerCountSel = document.getElementById('playerCount');
+const scoreDisplay = document.getElementById('scoreDisplay');
+
+const colorPalette = [
+  '#4ea1ff', '#ff6b6b', '#ffd86b', '#8fe58f',
+  '#ffa46b', '#b388ff', '#4deeea', '#ff6bd6'
+];
+const colorNames = ['Blue','Red','Yellow','Green','Orange','Purple','Cyan','Magenta'];
+
+let ws = null;
+let gameActive = true;
+// Create splash overlay for winner
+const winOverlay = document.createElement('div');
+winOverlay.style.position = 'fixed';
+winOverlay.style.left = '0';
+winOverlay.style.top = '0';
+winOverlay.style.width = '100%';
+winOverlay.style.height = '100%';
+winOverlay.style.display = 'none';
+winOverlay.style.alignItems = 'center';
+winOverlay.style.justifyContent = 'center';
+winOverlay.style.zIndex = 9998;
+winOverlay.style.color = '#001';
+winOverlay.style.fontFamily = 'Arial, Helvetica, sans-serif';
+winOverlay.style.fontSize = '48px';
+winOverlay.style.fontWeight = '700';
+winOverlay.style.pointerEvents = 'none';
+winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
+document.body.appendChild(winOverlay);
+let activeRoles = [];
+let players = {};
+let scores = {};
+let asteroids = [];
+const ASTEROID_COUNT = 6;
+const ARENA_RADIUS = 270;
+const ARENA_CENTER = {x: canvas.width/2, y: canvas.height/2};
+
+// --- Initialize players and asteroids ---
+function initPlayers() {
+  const n = parseInt(playerCountSel.value, 10);
+  activeRoles = Array.from({length: n}, (_, i) => colorNames[i].toLowerCase());
+  players = {};
+  scores = {};
+  const angleStep = (2 * Math.PI) / n;
+  for (let i = 0; i < n; i++) {
+    const angle = i * angleStep;
+    players[activeRoles[i]] = {
+      x: ARENA_CENTER.x + Math.cos(angle) * 200,
+      y: ARENA_CENTER.y + Math.sin(angle) * 200,
+      vx: 0, vy: 0,
+      color: colorPalette[i],
+      baseAngle: angle
+    };
+    scores[activeRoles[i]] = 0;
+  }
+  initAsteroids();
+  updateScoreDisplay();
+}
+playerCountSel.addEventListener('change', initPlayers);
+
+// Restart button logic
+document.getElementById('restart').addEventListener('click', () => {
+  gameActive = true;
+  initPlayers();
+  winOverlay.style.display = 'none';
+  info.textContent = '';
+});
+
+function initAsteroids() {
+  asteroids = [];
+  // Scale asteroid count with player count (3 per player)
+  const asteroidCount = Math.max(3, activeRoles.length * 3);
+  for (let i = 0; i < asteroidCount; i++) {
+    const angle = Math.random() * 2 * Math.PI;
+    const dist = Math.random() * ARENA_RADIUS * 0.6;
+    asteroids.push({
+      x: ARENA_CENTER.x + Math.cos(angle) * dist,
+      y: ARENA_CENTER.y + Math.sin(angle) * dist,
+      vx: (Math.random()-0.5)*24, // Lower initial velocity
+      vy: (Math.random()-0.5)*24,
+      r: 12 + Math.random()*8
+    });
+  }
+}
+
+function updateScoreDisplay() {
+  scoreDisplay.innerHTML = '';
+  for (let i = 0; i < activeRoles.length; i++) {
+    const r = activeRoles[i];
+    const span = document.createElement('span');
+    span.style.color = colorPalette[i];
+    span.textContent = `${colorNames[i]}: ${scores[r]}`;
+    scoreDisplay.appendChild(span);
+  }
+}
+
+// --- Movement & game logic ---
+function handleTilt(role, beta, gamma) {
+  const p = players[role];
+  if (!p) return;
+  const tiltX = gamma / 35;
+  // Reverse up/down tilt
+  const tiltY = -beta / 35;
+  const THRUST = 260; // Increased thrust for faster movement
+  p.vx += tiltX * THRUST * 0.02;
+  p.vy += tiltY * THRUST * 0.02;
+}
+
+function update(dt) {
+  if (!gameActive) return;
+  // Move players
+  for (const r of activeRoles) {
+    const p = players[r];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+
+    // Boundary circle
+    const dx = p.x - ARENA_CENTER.x;
+    const dy = p.y - ARENA_CENTER.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > ARENA_RADIUS - 10) {
+      const nx = dx / dist, ny = dy / dist;
+      p.x = ARENA_CENTER.x + nx * (ARENA_RADIUS - 10);
+      p.y = ARENA_CENTER.y + ny * (ARENA_RADIUS - 10);
+      const dot = p.vx*nx + p.vy*ny;
+      p.vx -= 1.5*dot*nx;
+      p.vy -= 1.5*dot*ny;
+    }
+  }
+
+  // Move asteroids
+  for (let i = asteroids.length - 1; i >= 0; i--) {
+    const a = asteroids[i];
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+
+    // Bounce from arena boundary
+    const dx = a.x - ARENA_CENTER.x;
+    const dy = a.y - ARENA_CENTER.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > ARENA_RADIUS - a.r) {
+      const nx = dx / dist, ny = dy / dist;
+      a.x = ARENA_CENTER.x + nx * (ARENA_RADIUS - a.r);
+      a.y = ARENA_CENTER.y + ny * (ARENA_RADIUS - a.r);
+      const dot = a.vx*nx + a.vy*ny;
+      a.vx -= 1.5*dot*nx;
+      a.vy -= 1.5*dot*ny;
+    }
+
+    // Collide with players
+    for (const r of activeRoles) {
+      const p = players[r];
+      const pdx = a.x - p.x, pdy = a.y - p.y;
+      const d2 = pdx*pdx + pdy*pdy;
+      const minDist = a.r + 10;
+      if (d2 < minDist*minDist) {
+        const d = Math.sqrt(d2) || 1;
+        const nx = pdx / d, ny = pdy / d;
+        const overlap = minDist - d;
+        a.x += nx * overlap * 0.5;
+        a.y += ny * overlap * 0.5;
+        a.vx += nx * 120 * dt;
+        a.vy += ny * 120 * dt;
+        p.vx -= nx * 80 * dt;
+        p.vy -= ny * 80 * dt;
+      }
+    }
+
+    // Check if asteroid is near a player's base
+    let taken = false;
+    for (const r of activeRoles) {
+      const p = players[r];
+      const bx = ARENA_CENTER.x + Math.cos(p.baseAngle) * (ARENA_RADIUS - 40);
+      const by = ARENA_CENTER.y + Math.sin(p.baseAngle) * (ARENA_RADIUS - 40);
+      const dx = a.x - bx, dy = a.y - by;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < 30) {
+        scores[r]++;
+        updateScoreDisplay();
+        // Remove asteroid from game
+        asteroids.splice(i, 1);
+        taken = true;
+        break;
+      }
+    }
+    // If asteroid was taken, skip further checks for this asteroid
+    if (taken) continue;
+  }
+  // End game if all asteroids are taken
+  if (asteroids.length === 0 && gameActive) {
+    gameActive = false;
+    // Find winner(s)
+    let maxScore = -1, winners = [];
+    for (const r of activeRoles) {
+      if (scores[r] > maxScore) { maxScore = scores[r]; winners = [r]; }
+      else if (scores[r] === maxScore) { winners.push(r); }
+    }
+    if (winners.length === 1) {
+      const idx = activeRoles.indexOf(winners[0]);
+      winOverlay.style.background = colorPalette[idx] || '#fff';
+      winOverlay.textContent = `${colorNames[idx]} wins!`;
+    } else {
+      winOverlay.style.background = '#fff';
+      winOverlay.textContent = `Tie: ${winners.map(r=>colorNames[activeRoles.indexOf(r)]).join(', ')}!`;
+    }
+    winOverlay.style.display = 'flex';
+    info.textContent = winOverlay.textContent;
+    setTimeout(()=>{ winOverlay.style.display = 'none'; }, 3000);
+  }
+}
+
+// --- Draw ---
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Draw arena boundary
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(ARENA_CENTER.x,ARENA_CENTER.y,ARENA_RADIUS,0,Math.PI*2);
+  ctx.stroke();
+
+  // Draw bases
+  for (const r of activeRoles) {
+    const p = players[r];
+    const bx = ARENA_CENTER.x + Math.cos(p.baseAngle) * (ARENA_RADIUS - 40);
+    const by = ARENA_CENTER.y + Math.sin(p.baseAngle) * (ARENA_RADIUS - 40);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(bx, by, 20, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Draw asteroids
+  for (const a of asteroids) {
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.arc(a.x,a.y,a.r,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#aaa';
+    ctx.stroke();
+  }
+
+  // Draw players
+  for (const r of activeRoles) {
+    const p = players[r];
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,10,0,Math.PI*2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+// --- Main loop ---
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(40, now-last)/1000;
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// --- WebSocket hookup ---
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token=data.token;
+  const proto=(location.protocol==='https:')?'wss':'ws';
+  const wsUrl=data.ws_url ?
+    (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) :
+    `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  ws=new WebSocket(wsUrl);
+  ws.onopen=()=>info.textContent='Connected';
+  ws.onmessage=ev=>{
+    try{
+      const d=JSON.parse(ev.data);
+      if(!d||!d.role)return;
+      // Normalize short codes and color names to color name roles
+      let role = d.role;
+      const codeMap = {
+        b: 'blue', r: 'red', y: 'yellow', g: 'green', o: 'orange', p: 'purple', c: 'cyan', m: 'magenta',
+        blue: 'blue', red: 'red', yellow: 'yellow', green: 'green', orange: 'orange', purple: 'purple', cyan: 'cyan', magenta: 'magenta'
+      };
+      if (codeMap[role] !== undefined) {
+        role = codeMap[role];
+      }
+      if(!activeRoles.includes(role))return;
+      if(d.orientBeta!==undefined&&d.orientGamma!==undefined){
+        handleTilt(role,d.orientBeta,d.orientGamma);
+      } else if(d.beta!==undefined&&d.gamma!==undefined){
+        handleTilt(role,d.beta,d.gamma);
+      }
+    }catch(e){}
+  };
+  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{info.textContent='No backend /api/token';});
+
+// init
+initPlayers();
+</script>
+</body>
+</html>

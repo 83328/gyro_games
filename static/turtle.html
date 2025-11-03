@@ -102,6 +102,15 @@ function initPlayers(){
     players[role]={x:80,y:laneHeight*(i+0.5),speed:0,power:0};
     i++;
   }
+  // Set score colors in HUD
+  const ids = {
+    blue: sBlue, red: sRed, yellow: sYellow, green: sGreen,
+    orange: sOrange, purple: sPurple, cyan: sCyan, magenta: sMagenta
+  };
+  for(const role of Object.keys(ids)){
+    const el = ids[role];
+    if(el) el.style.color = colors[role];
+  }
   startCountdown();
 }
 initPlayers();
