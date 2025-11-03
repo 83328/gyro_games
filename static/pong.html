@@ -172,7 +172,7 @@
         }
         // Add room id to wsUrl
         wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
-        status.textContent = 'Ready  connecting...';
+        status.textContent = 'Ready connecting...';
         connect();
     }).catch(e=>{
         status.textContent = 'No ws info (is server running?)';

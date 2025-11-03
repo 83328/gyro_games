@@ -37,6 +37,9 @@
 </head>
 <body>
   <h1>Gyro Sumo</h1>
+  <div id="splash" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;align-items:center;justify-content:center;background:#000;">
+    <span id="splashText" style="font-size:4em;font-weight:bold;color:#fff;text-shadow:0 0 24px #000"></span>
+  </div>
   <div id="info">Connecting...</div>
   <div id="scores">
     Players:
@@ -49,13 +52,14 @@
       <option value="7">7 players</option>
       <option value="8">8 players</option>
     </select>
-    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
-    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
-    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
-    <span id="orangeScoreContainer" style="display:none"> — Orange: <span id="sOrange">0</span></span>
-    <span id="purpleScoreContainer" style="display:none"> — Purple: <span id="sPurple">0</span></span>
-    <span id="cyanScoreContainer" style="display:none"> — Cyan: <span id="sCyan">0</span></span>
-    <span id="magentaScoreContainer" style="display:none"> — Magenta: <span id="sMagenta">0</span></span>
+  <span style="color:#4ea1ff">Blue: <span id="sBlue">0</span></span> —
+    <span style="color:#ff6b6b">Red: <span id="sRed">0</span></span>
+    <span id="yellowScoreContainer" style="display:none;color:#ffd86b"> — Yellow: <span id="sYellow">0</span></span>
+    <span id="greenScoreContainer" style="display:none;color:#8fe58f"> — Green: <span id="sGreen">0</span></span>
+    <span id="orangeScoreContainer" style="display:none;color:#ffae42"> — Orange: <span id="sOrange">0</span></span>
+    <span id="purpleScoreContainer" style="display:none;color:#b388ff"> — Purple: <span id="sPurple">0</span></span>
+    <span id="cyanScoreContainer" style="display:none;color:#4deeea"> — Cyan: <span id="sCyan">0</span></span>
+    <span id="magentaScoreContainer" style="display:none;color:#ff6bd6"> — Magenta: <span id="sMagenta">0</span></span>
   </div>
 
   <div id="controls" style="margin-bottom:8px;">
@@ -297,8 +301,23 @@ function checkWinner(){
     if(typeof sCyan !== 'undefined') sCyan.textContent = scores.cyan;
     if(typeof sMagenta !== 'undefined') sMagenta.textContent = scores.magenta;
     info.textContent = `${winner} wins the round!`;
-    setTimeout(()=>{ resetRound(); }, 2000);
+    showSplash(winner);
+    setTimeout(()=>{ hideSplash(); resetRound(); }, 3000);
   }
+// Splash screen logic
+function showSplash(winner) {
+  const splash = document.getElementById('splash');
+  const splashText = document.getElementById('splashText');
+  splash.style.display = 'flex';
+  splash.style.background = colors[winner] || '#fff';
+  splashText.textContent = `${winner.charAt(0).toUpperCase() + winner.slice(1)} Wins!`;
+  splashText.style.color = (winner === 'yellow' || winner === 'orange') ? '#222' : '#fff';
+}
+
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  splash.style.display = 'none';
+}
   if(alive.length === 0){
     info.textContent = `All fell off! Restarting...`;
     setTimeout(()=>{ resetRound(); }, 2000);

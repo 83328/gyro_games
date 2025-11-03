@@ -6,8 +6,8 @@
   <title>Moon Lander — Gyro Games</title>
   <style>
     html,body{height:100%}
-    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px;box-sizing:border-box;overflow:hidden}
-  canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:8px;max-width:100%;height:auto}
+    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px 12px 0 12px;box-sizing:border-box;overflow:hidden}
+  canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:2px;max-width:100%;height:auto}
   #msg{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:6px;color:#cfe;font-weight:600}
     .hud{display:flex;gap:12px;align-items:center}
     button{padding:.4rem .8rem;border-radius:6px;border:none;background:#1f6feb;color:white}
@@ -15,7 +15,8 @@
   </style>
 </head>
 <body>
-  <h1>Moon Lander</h1>
+  <h1 style="margin-bottom:4px">Moon Lander</h1>
+  <div id="connectionStatus" style="margin-bottom:8px;color:#fff;font-size:16px"></div>
   <div class="hud">
     <label style="margin-left:8px">Players:
       <select id="playerCount" style="margin-left:6px">
@@ -226,6 +227,30 @@ function drawGround(){
 }
 
 function drawLander(pl, color){
+  // Check if lander is off screen
+  if(pl.x < 0 || pl.x > W || pl.y < 0 || pl.y > H){
+    // Draw triangle at edge and show coordinates
+    let tx = Math.max(12, Math.min(W-12, pl.x));
+    let ty = Math.max(12, Math.min(H-12, pl.y));
+    let angle = 0;
+    if(pl.x < 0) { tx = 12; angle = Math.PI; }
+    if(pl.x > W) { tx = W-12; angle = 0; }
+    if(pl.y < 0) { ty = 12; angle = Math.PI/2; }
+    if(pl.y > H) { ty = H-12; angle = -Math.PI/2; }
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle);
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // Show coordinates
+    ctx.save();
+    ctx.font = '13px monospace';
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${pl.x.toFixed(0)},${pl.y.toFixed(0)}`, tx, ty+22);
+    ctx.restore();
+    return;
+  }
+  // Draw normal lander
   ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(pl.angle);
   ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
   // flame
@@ -234,14 +259,7 @@ function drawLander(pl, color){
 }
 
 function drawHUD(){
-  ctx.fillStyle='white'; ctx.font='12px monospace';
-  let y = 12;
-  for(const role of Object.keys(players)){
-    const p = players[role];
-    ctx.fillText(`${role.charAt(0).toUpperCase()+role.slice(1)} fuel:${p.fuel.toFixed(0)} vx:${p.vx.toFixed(1)} vy:${p.vy.toFixed(1)} ang:${(p.angle*57.3).toFixed(0)}`, 8,y);
-    y += 18;
-  }
-  // fuel bars: stack on right side
+  // Draw fuel bars on top right
   const fw = 120, fh = 8;
   let fy = 8;
   for(const role of Object.keys(players)){
@@ -264,17 +282,26 @@ function step(dt){
     if(p.landed || p.crashed) { p.thrust = 0; continue; }
     // ensure inputs exist for this role
     if(!inputs[role]) inputs[role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
-  // smooth incoming raw inputs into working values
-  inputs[role].beta = inputs[role].beta * (1 - INPUT_SMOOTH) + (inputs[role].rawBeta || 0) * INPUT_SMOOTH;
-  inputs[role].gamma = inputs[role].gamma * (1 - INPUT_SMOOTH) + (inputs[role].rawGamma || 0) * INPUT_SMOOTH;
-  const beta = inputs[role].beta || 0; const gamma = inputs[role].gamma || 0;
-  // thrust mapping: positive beta -> thrust (tilt up increases thrust)
-  let thrust = 0;
-  if(running){ thrust = Math.max(0, Math.min(1, (beta)/35)); }
+    // smooth incoming raw inputs into working values
+    inputs[role].beta = inputs[role].beta * (1 - INPUT_SMOOTH) + (inputs[role].rawBeta || 0) * INPUT_SMOOTH;
+    inputs[role].gamma = inputs[role].gamma * (1 - INPUT_SMOOTH) + (inputs[role].rawGamma || 0) * INPUT_SMOOTH;
+    const beta = inputs[role].beta || 0; const gamma = inputs[role].gamma || 0;
+    // thrust mapping: positive beta -> thrust (tilt up increases thrust)
+    let thrust = 0;
+    if(running){ thrust = Math.max(0, Math.min(1, (beta)/35)); }
     // small deadzone
     if(Math.abs(thrust) < 0.03) thrust = 0;
     // rotation from gamma: left/right tilt -> angular acceleration sign
     const rotInput = Math.max(-1, Math.min(1, (gamma || 0)/30));
+
+    // If off top, left, or right
+    if(p.x < 0 || p.x > W || p.y < 0){
+      if(thrust === 0){
+        p.vy = Math.abs(p.vy) < 40 ? 40 : Math.abs(p.vy); // force downward velocity
+        p.vx = 0; // stop horizontal drift
+      }
+      // If thrusting, allow movement as normal
+    }
 
     // consume fuel
     if(thrust>0 && p.fuel>0){ p.fuel = Math.max(0, p.fuel - FUEL_CONSUMPTION * thrust * dt); }
@@ -347,7 +374,11 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ msg.textContent=`Connected, Room ID: ${ROOM_ID}`; };
+  ws.onopen = ()=>{
+    msg.textContent=`Connected, Room ID: ${ROOM_ID}`;
+    const statusEl = document.getElementById('connectionStatus');
+    if(statusEl) statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`;
+  };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);

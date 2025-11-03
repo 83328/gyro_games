@@ -41,21 +41,17 @@
   <h2 style="margin:0;">Pick your colour and press start</h2>
   <div class="controls">
     <div><span id="status">Idle</span></div>
-    <div style="margin:8px 0; display:flex; align-items:center; gap:8px; justify-content:center;">
-  <label for="roomIdInput" id="roomIdLabel" style="font-weight:600;">Room ID:</label>
-  <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;text-align:center" value="" autocomplete="off" />
-      <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-      <div class="spacer" aria-hidden="true"></div>
-      <div style="display:flex;gap:8px;justify-content:center">
-        <button id="startBtn">Start</button>
-        <button id="stopBtn" disabled>Stop</button>
-      </div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button id="toggleStreamBtn" style="background:#1f6feb;color:#fff;font-weight:600;font-size:1.15em;box-shadow:0 2px 8px #1f6feb77;">Start</button>
     </div>
   </div>
   <div style="height:100px;">&nbsp;</div>
   <div class="roles">
+    <div style="position:fixed;bottom:0;left:0;width:100%;background:#111;padding:12px 0 8px 0;display:flex;align-items:center;justify-content:center;gap:8px;z-index:10;box-shadow:0 -2px 12px #0008;">
+      <label for="roomIdInput" id="roomIdLabel" style="font-weight:600;color:#fff;">Room ID:</label>
+      <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;text-align:center" value="" autocomplete="off" />
+      <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
+    </div>
     <button id="roleBlue" data-role="blue">Blue</button>
     <button id="roleRed" data-role="red">Red</button>
     <button id="roleYellow" data-role="yellow">Yellow</button>
@@ -68,8 +64,7 @@
 
 <script>
 let AUTH_TOKEN = null;
-const startBtn = document.getElementById('startBtn');
-const stopBtn  = document.getElementById('stopBtn');
+const toggleStreamBtn = document.getElementById('toggleStreamBtn');
 const statusEl = document.getElementById('status');
 
 let socket = null;
@@ -133,10 +128,12 @@ function openSocket() {
   socket.onopen = () => {
     statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`;
     log('WebSocket open');
+    toggleStreamBtn.textContent = 'Stop';
   };
   socket.onclose = () => {
     statusEl.textContent = `WebSocket closed, Room ID: ${ROOM_ID}`;
     log('WebSocket closed');
+    toggleStreamBtn.textContent = 'Start';
   };
   socket.onerror = (e) => {
     log('Socket error');
@@ -214,10 +211,10 @@ function applyRoleColor(r) {
   const style = colorMap[r] || {bg: '#111', text: '#fff'};
   document.body.style.background = style.bg;
   document.body.style.color = style.text;
-  // Also update Room ID label and input to match text color
+  // Always keep Room ID label white for visibility
   const roomIdLabel = document.getElementById('roomIdLabel');
   const roomIdInput = document.getElementById('roomIdInput');
-  if (roomIdLabel) roomIdLabel.style.color = style.text;
+  if (roomIdLabel) roomIdLabel.style.color = '#fff';
   if (roomIdInput) roomIdInput.style.color = '#fff';
 }
 
@@ -268,8 +265,6 @@ async function startStreaming() {
   window.addEventListener('devicemotion', handleMotion);
   // deviceorientation listener was already added above to cache values; ensure it's active
   // nothing else needed here
-  startBtn.disabled = true;
-  stopBtn.disabled = false;
   statusEl.textContent = 'Streaming...';
 }
 
@@ -277,13 +272,18 @@ function stopStreaming() {
   listening = false;
   window.removeEventListener('devicemotion', handleMotion);
   if (socket) socket.close();
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
   statusEl.textContent = 'Stopped';
 }
 
-startBtn.addEventListener('click', startStreaming);
-stopBtn.addEventListener('click', stopStreaming);
+toggleStreamBtn.addEventListener('click', () => {
+  if (!listening) {
+    startStreaming();
+    toggleStreamBtn.textContent = 'Stop';
+  } else {
+    stopStreaming();
+    toggleStreamBtn.textContent = 'Start';
+  }
+});
 </script>
 </body>
 </html>
