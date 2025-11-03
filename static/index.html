@@ -21,8 +21,9 @@
   </style>
 </head>
 <body>
-  <div class="card" style="text-align:center">
-    <a class="btn secondary" href="/gyro.html">Gyro Streamer</a>
+  <!-- Room ID display -->
+  <div class="card" style="text-align:center; margin-bottom:10px;">
+    <div style="font-size:18px; font-weight:600; color:#ffd86b; letter-spacing:2px;">Room ID: <span id="roomIdDisplay"></span></div>
   </div>
   <div class="card" style="text-align:center">
     <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-direction:column">
@@ -47,7 +48,6 @@
   <a class="thumb" href="/pong.html" title="Pong"><img class="thumb-img" src="/media/images/thumb_pong.png" alt="Pong thumbnail"/><div class="overlay">Pong</div></a>
   <a class="thumb" href="/blackhole.html" title="Blackhole Blaster"><img class="thumb-img" src="/media/images/thumb_blackhole.png" alt="Blackhole Blaster thumbnail"/><div class="overlay">Blackhole Blaster</div></a>
     </div>
-    <p class="small">Open <strong>Gyro Streamer</strong> on a mobile device to stream motion, and open any of the games on a display to start playing.</p>
   </div>
 </body>
 <script>
@@ -59,6 +59,11 @@
     return code;
   }
   const roomCode = randomRoomCode();
+  // Show room code in the page
+  document.addEventListener('DOMContentLoaded', function() {
+    const roomIdDisplay = document.getElementById('roomIdDisplay');
+    if (roomIdDisplay) roomIdDisplay.textContent = roomCode;
+  });
 
   const qrImg = document.getElementById('qrImg');
   const useRoot = document.getElementById('useRoot');
@@ -68,8 +73,6 @@
   function buildUrl(){
     return `${location.protocol}//${location.host}/gyro.html?room=${roomCode}`;
   }
-
-  // Update all game links to include ?room=ROOMCODE
   function updateGameLinks() {
     const links = document.querySelectorAll('.thumb-grid a');
     links.forEach(link => {

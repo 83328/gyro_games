@@ -41,19 +41,12 @@
   <h2 style="margin:0;">Pick your colour and press start</h2>
   <div class="controls">
     <div><span id="status">Idle</span></div>
+    <div style="margin:8px 0; display:flex; align-items:center; gap:8px; justify-content:center;">
+  <label for="roomIdInput" id="roomIdLabel" style="font-weight:600;">Room ID:</label>
+  <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;text-align:center" value="" autocomplete="off" />
+      <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
+    </div>
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="color:#ddd;font-weight:600;margin-right:8px">Players:</label>
-        <select id="transmitPlayerCount" style="margin-right:8px">
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-        </select>
-      </div>
       <div class="spacer" aria-hidden="true"></div>
       <div style="display:flex;gap:8px;justify-content:center">
         <button id="startBtn">Start</button>
@@ -98,7 +91,24 @@ function getRoomId() {
   for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
-const ROOM_ID = getRoomId();
+let ROOM_ID = getRoomId();
+
+// Room ID input logic
+const roomIdInput = document.getElementById('roomIdInput');
+const setRoomBtn = document.getElementById('setRoomBtn');
+if (roomIdInput) roomIdInput.value = ROOM_ID;
+if (setRoomBtn) {
+  setRoomBtn.addEventListener('click', () => {
+    let val = (roomIdInput.value || '').toUpperCase().replace(/[^A-Z]/g, '');
+    if (val.length === 3) {
+      ROOM_ID = val;
+      roomIdInput.value = ROOM_ID;
+      statusEl.textContent = `Room set to ${ROOM_ID}`;
+    } else {
+      statusEl.textContent = 'Room ID must be 3 letters';
+    }
+  });
+}
 
 function buildWsUrl() {
   const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
@@ -190,39 +200,25 @@ function applyRoleColor(r) {
     if(!btn) return;
     if(roleName === r) btn.classList.add('selected'); else btn.classList.remove('selected');
   });
-  // set the body background and pick an accessible text color based on luminance
+  // set the body background and hardcode text color for contrast
   const colorMap = {
-    blue: '#4ea1ff',
-    red: '#ff6b6b',
-    yellow: '#ffd86b',
-    green: '#8fe58f',
-    orange: '#ff9f4d',
-    purple: '#b58cff',
-    cyan: '#4de6e6',
-    magenta: '#ff6bff'
+    blue:    {bg: '#4ea1ff', text: '#042434'},
+    red:     {bg: '#ff6b6b', text: '#3b0000'},
+    yellow:  {bg: '#ffd86b', text: '#332900'},
+    green:   {bg: '#8fe58f', text: '#042a04'},
+    orange:  {bg: '#ff9f4d', text: '#2b1300'},
+    purple:  {bg: '#b58cff', text: '#1f0533'},
+    cyan:    {bg: '#4de6e6', text: '#022525'},
+    magenta: {bg: '#ff6bff', text: '#330033'}
   };
-  const bg = colorMap[r] || '';
-  document.body.style.background = bg;
-  // helper: convert hex -> RGB [r,g,b]
-  function hexToRgb(hex){
-    if(!hex) return null;
-    const h = hex.replace('#','');
-    const bigint = parseInt(h,16);
-    if(h.length === 6) return [(bigint>>16)&255, (bigint>>8)&255, bigint&255];
-    if(h.length === 3) return [parseInt(h[0]+h[0],16), parseInt(h[1]+h[1],16), parseInt(h[2]+h[2],16)];
-    return null;
-  }
-  // helper: relative luminance per WCAG
-  function luminance(rgb){
-    if(!rgb) return 0;
-    const srgb = rgb.map(v => v/255).map(c => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4));
-    return 0.2126*srgb[0] + 0.7152*srgb[1] + 0.0722*srgb[2];
-  }
-  const rgb = hexToRgb(bg);
-  const lum = luminance(rgb);
-  // threshold around 0.5 is a reasonable heuristic: light backgrounds get black text
-  if(rgb && lum > 0.5) document.body.style.color = '#000'; else if (rgb) document.body.style.color = '#fff';
-  if(!rgb){ document.body.style.color = ''; }
+  const style = colorMap[r] || {bg: '#111', text: '#fff'};
+  document.body.style.background = style.bg;
+  document.body.style.color = style.text;
+  // Also update Room ID label and input to match text color
+  const roomIdLabel = document.getElementById('roomIdLabel');
+  const roomIdInput = document.getElementById('roomIdInput');
+  if (roomIdLabel) roomIdLabel.style.color = style.text;
+  if (roomIdInput) roomIdInput.style.color = '#fff';
 }
 
 document.getElementById('roleBlue').addEventListener('click', () => { role='blue'; applyRoleColor('blue'); log('Role=blue'); });
@@ -234,31 +230,9 @@ document.getElementById('rolePurple').addEventListener('click', () => { role='pu
 document.getElementById('roleCyan').addEventListener('click', () => { role='cyan'; applyRoleColor('cyan'); log('Role=cyan'); });
 document.getElementById('roleMagenta').addEventListener('click', () => { role='magenta'; applyRoleColor('magenta'); log('Role=magenta'); });
 
-// player count selector for transmitter: shows only the first N role buttons
-const transmitPlayerCount = document.getElementById('transmitPlayerCount');
-function updateRoleButtons(){
-  const n = parseInt(transmitPlayerCount.value, 10) || 2;
-  const order = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
-  order.forEach((r, idx) => {
-    const btn = document.querySelector(`button[data-role="${r}"]`);
-    if(!btn) return;
-    if(idx < n) btn.style.display = '';
-    else btn.style.display = 'none';
-  });
-  // update CSS column count so flex-basis keeps buttons equal width
-  const rolesContainer = document.querySelector('.roles');
-  if(rolesContainer) rolesContainer.style.setProperty('--cols', String(n));
-  // if the currently selected role is hidden, pick the first visible role
-  const visible = order.filter((r, idx) => idx < n);
-  if(!visible.includes(role)){
-    role = visible[0];
-    applyRoleColor(role);
-  }
-}
-transmitPlayerCount.addEventListener('change', updateRoleButtons);
-// initialize with 4 visible by default
-transmitPlayerCount.value = '4';
-updateRoleButtons();
+// Always show all 8 color buttons, no player count selector needed
+const rolesContainer = document.querySelector('.roles');
+if(rolesContainer) rolesContainer.style.setProperty('--cols', '8');
 
 // keep latest deviceorientation around so we can include it with motion payloads
 window.addEventListener('deviceorientation', (ev) => {
