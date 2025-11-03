@@ -311,29 +311,44 @@ function resetRound(){
   initPlayers();
 }
 
+// Room id extraction from URL
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if (!room || room.length !== 3) {
+    room = 'DEF'; // fallback
+  }
+  return room.toUpperCase();
+}
+const ROOM_ID = getRoomId();
+
 // WebSocket setup (same API as maze)
 fetch('/api/token').then(r=>r.json()).then(data=>{
   const token=data.token;
   const proto=(location.protocol==='https:')?'wss':'ws';
-  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  let wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  // Add room id to wsUrl
+  wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws=new WebSocket(wsUrl);
   ws.onopen=()=>{info.textContent='Connected';};
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
       if(!d||!d.role) return;
-        if(typeof d.role === 'string' && d.role.length === 1){
-          d.role = (
-            d.role === 'b' ? 'blue' :
-            d.role === 'r' ? 'red' :
-            d.role === 'y' ? 'yellow' :
-            d.role === 'g' ? 'green' :
-            d.role === 'o' ? 'orange' :
-            d.role === 'p' ? 'purple' :
-            d.role === 'c' ? 'cyan' :
-            d.role === 'm' ? 'magenta' : d.role
-          );
-        }
+      // Only process messages for this room
+      if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
+      if(typeof d.role === 'string' && d.role.length === 1){
+        d.role = (
+          d.role === 'b' ? 'blue' :
+          d.role === 'r' ? 'red' :
+          d.role === 'y' ? 'yellow' :
+          d.role === 'g' ? 'green' :
+          d.role === 'o' ? 'orange' :
+          d.role === 'p' ? 'purple' :
+          d.role === 'c' ? 'cyan' :
+          d.role === 'm' ? 'magenta' : d.role
+        );
+      }
       if(!activeRoles.includes(d.role)) return;
       if(d.orientBeta!==undefined && d.orientGamma!==undefined){
         lastDeviceOrientation = {beta:d.orientBeta,gamma:d.orientGamma};

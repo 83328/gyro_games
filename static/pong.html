@@ -27,12 +27,21 @@
     const status = document.getElementById('status');
     const logs = document.getElementById('logs');
 
+    // Room id extraction from URL
+    function getRoomId() {
+        const params = new URLSearchParams(window.location.search);
+        let room = params.get('room');
+        if (!room || room.length !== 3) {
+            room = 'DEF'; // fallback
+        }
+        return room.toUpperCase();
+    }
+    const ROOM_ID = getRoomId();
+
     // Paddles
     const paddleWidth = 120;
     const paddleHeight = 16;
-    // blue paddle (bottom)
     let blueX = canvas.width/2 - paddleWidth/2;
-    // red paddle (top)
     let redX = canvas.width/2 - paddleWidth/2;
 
     // Ball
@@ -49,23 +58,18 @@
 
     function draw() {
         ctx.clearRect(0,0,canvas.width,canvas.height);
-    // red paddle (top)
-    ctx.fillStyle = '#ff6b6b';
-    ctx.fillRect(redX, 4, paddleWidth, paddleHeight);
-    // blue paddle (bottom)
-    ctx.fillStyle = '#4ea1ff';
-    ctx.fillRect(blueX, canvas.height - paddleHeight - 4, paddleWidth, paddleHeight);
+        ctx.fillStyle = '#ff6b6b';
+        ctx.fillRect(redX, 4, paddleWidth, paddleHeight);
+        ctx.fillStyle = '#4ea1ff';
+        ctx.fillRect(blueX, canvas.height - paddleHeight - 4, paddleWidth, paddleHeight);
         if (ballX - ballRadius < 0 || ballX + ballRadius > canvas.width) ballSpeedX = -ballSpeedX;
 
-        // paddle collisions
         let redHit = false;
-        // paddle collision - bottom (blue)
         if (ballY + ballRadius > canvas.height - paddleHeight - 4 && ballX > blueX && ballX < blueX + paddleWidth) {
             ballSpeedY = -Math.abs(ballSpeedY);
-            const hit = (ballX - blueX)/paddleWidth - 0.5; // -0.5..0.5
+            const hit = (ballX - blueX)/paddleWidth - 0.5;
             ballSpeedX += hit*2;
         }
-        // paddle collision - top (red)
         if (ballY - ballRadius < paddleHeight + 4 && ballX > redX && ballX < redX + paddleWidth) {
             ballSpeedY = Math.abs(ballSpeedY);
             const hit = (ballX - redX)/paddleWidth - 0.5;
@@ -73,28 +77,24 @@
             redHit = true;
         }
 
-        // misses: bottom miss -> point to red
         if (ballY - ballRadius > canvas.height) {
             redScore += 1;
             updateScoreUI();
             resetBall();
             appendLog('Blue missed - point to Red');
         }
-        // top miss (red missed): only reset if ball passed the top and red did not hit it -> point to blue
         if (ballY - ballRadius < 0 && !redHit) {
             blueScore += 1;
             updateScoreUI();
             resetBall();
             appendLog('Red missed - point to Blue');
         }
-        // draw the ball
         ctx.beginPath();
         ctx.fillStyle = '#fff';
         ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // advance the ball position
     function updateBall() {
         ballX += ballSpeedX;
         ballY += ballSpeedY;
@@ -118,11 +118,9 @@
         ballX = canvas.width/2;
         ballY = canvas.height/2;
         ballSpeedX = 3*(Math.random()>0.5?1:-1);
-        // randomize vertical direction: up or down
         ballSpeedY = (Math.random() > 0.5) ? -3 : 3;
     }
 
-    // Update paddle position from beta per role
     function updatePaddle(beta, role='blue') {
         if (beta === undefined || beta === null) return;
         const scale = 0.8;
@@ -132,7 +130,7 @@
             if (blueBetaHistory.length > smoothWindow) blueBetaHistory.shift();
             const avg = blueBetaHistory.reduce((a,b)=>a+b,0)/blueBetaHistory.length;
             const clamped = Math.max(-90, Math.min(90, avg*scale));
-            const norm = (clamped + 90) / 180; // 0..1
+            const norm = (clamped + 90) / 180;
             const target = norm * (canvas.width - paddleWidth);
             blueX = blueX*(1-alpha) + target*alpha;
             blueX = Math.max(0, Math.min(blueX, canvas.width - paddleWidth));
@@ -141,17 +139,15 @@
             if (redBetaHistory.length > smoothWindow) redBetaHistory.shift();
             const avg = redBetaHistory.reduce((a,b)=>a+b,0)/redBetaHistory.length;
             const clamped = Math.max(-90, Math.min(90, avg*scale));
-            const norm = (clamped + 90) / 180; // 0..1
+            const norm = (clamped + 90) / 180;
             const target = norm * (canvas.width - paddleWidth);
             redX = redX*(1-alpha) + target*alpha;
             redX = Math.max(0, Math.min(redX, canvas.width - paddleWidth));
         }
     }
 
-    // WebSocket: fetch endpoint then connect
     let ws = null;
     let wsUrl = null;
-    // Scores
     let blueScore = 0;
     let redScore = 0;
     const scoreBlueEl = document.getElementById('scoreBlue');
@@ -162,20 +158,19 @@
         if (scoreRedEl) scoreRedEl.textContent = String(redScore);
     }
 
-    // initialize scoreboard display
     updateScoreUI();
 
     fetch('/api/token').then(r=>{ if(!r.ok) throw new Error('no token'); return r.json(); }).then(data=>{
-        // Prefer explicit ws_url from server; otherwise build one for this host.
         const token = data.token;
         if (data.ws_url) {
-            // if server provided full ws_url, use it and append token if not present
             wsUrl = data.ws_url.includes('?') ? data.ws_url + '&token=' + encodeURIComponent(token) : data.ws_url + '?token=' + encodeURIComponent(token);
         } else {
             const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
             wsUrl = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
         }
-        status.textContent = 'Ready — connecting...';
+        // Add room id to wsUrl
+        wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
+        status.textContent = 'Ready  connecting...';
         connect();
     }).catch(e=>{
         status.textContent = 'No ws info (is server running?)';
@@ -191,8 +186,9 @@
                 try {
                     const d = JSON.parse(ev.data);
                     if (!d) return;
+                    // Only process messages for this room
+                    if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
                     if(typeof d.role === 'string' && d.role.length === 1){
-                        // For Pong we only accept blue (b) and red (r) players
                         d.role = (
                             d.role === 'b' ? 'blue' :
                             d.role === 'r' ? 'red' : undefined
@@ -201,14 +197,13 @@
                     if (d.beta !== undefined) updatePaddle(d.beta, d.role);
                 } catch(e) { /* ignore parse errors */ }
             };
-            ws.onclose = () => { status.textContent = 'Disconnected'; /* do not log errors */ setTimeout(connect,3000); };
-            ws.onerror = () => { status.textContent = 'WS error'; /* suppressed error logs */ };
+            ws.onclose = () => { status.textContent = 'Disconnected'; setTimeout(connect,3000); };
+            ws.onerror = () => { status.textContent = 'WS error'; };
         } catch(e) {
             status.textContent = 'WS failed';
         }
     }
 
-    // start
     gameLoop();
     </script>
 </body>

@@ -332,14 +332,32 @@ function resetRound(){
   draw();
 }
 
-// WebSocket hookup: reuse /api/token to get backend location
+// Room id extraction from URL
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if(room && /^[A-Z]{3}$/.test(room)) return room.toUpperCase();
+  // fallback: generate random room if missing (shouldn't happen from QR)
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+// ROOM_ID is now only declared once below
+const ROOM_ID = getRoomId();
+
 let ws=null;
 fetch('/api/token').then(r=>r.json()).then(data=>{
   const token = data.token;
   const proto = (location.protocol==='https:')?'wss':'ws';
-  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  // Add room id to ws URL
+  let wsUrl;
+  if(data.ws_url){
+    wsUrl = data.ws_url.includes('?') ? `${data.ws_url}&token=${encodeURIComponent(token)}&room=${ROOM_ID}` : `${data.ws_url}?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
+  } else {
+    wsUrl = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
+  }
   ws = new WebSocket(wsUrl);
-  // prefer ArrayBuffer for binary frames so we can decode uniformly
   try{ ws.binaryType = 'arraybuffer'; }catch(e){}
 
   ws.onopen = ()=>{
@@ -349,14 +367,11 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 
   ws.onmessage = async (ev)=>{
     try{
-      // normalize payload to a string regardless of frame type
       let payloadText = '';
       if(ev.data instanceof ArrayBuffer){
         payloadText = new TextDecoder().decode(ev.data);
       } else if(typeof Blob !== 'undefined' && ev.data instanceof Blob){
-        // Blob -> text
         try{ payloadText = await ev.data.text(); }catch(e){
-          // fallback to FileReader if .text() unavailable
           payloadText = await new Promise((resolve, reject)=>{
             const fr = new FileReader(); fr.onload = ()=>resolve(fr.result); fr.onerror = reject; fr.readAsText(ev.data);
           });
@@ -367,7 +382,12 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 
       const d = JSON.parse(payloadText);
       if(!d || d.role==null) return;
-      // map short role codes to full names (supports o/p/c/m)
+      // Accept messages only for this room (case-insensitive)
+      if(d.room && String(d.room).toUpperCase() !== ROOM_ID) {
+        // For debugging, log mismatched room messages
+        console.log('[maze] Ignored message for room', d.room, 'expected', ROOM_ID);
+        return;
+      }
       if(typeof d.role === 'string' && d.role.length===1){
         d.role = (
           d.role === 'b' ? 'blue' :
@@ -381,11 +401,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
           d.role
         );
       }
-      // if orientation angles are provided, prefer them (more stable for tilt)
-      if(!activeRoles.includes(d.role)) return; // ignore inputs for inactive players
-      // ensure the players object has an entry for this role so handleTilt can operate
+      if(!activeRoles.includes(d.role)) return;
       if(!players[d.role]){
-        // place sensible default grid starts (pixel positions will be updated by resize/reset as needed)
         if(d.role === 'orange'){
           players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
         } else if(d.role === 'purple'){
@@ -409,7 +426,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
         const now = Date.now();
         if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:now};
         const state = rotState[d.role];
-        const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02; // seconds
+        const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02;
         state.ts = now;
         state.b += (d.beta || 0) * dt;
         state.g += (d.gamma || 0) * dt;
@@ -423,7 +440,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   };
 
   ws.onerror = (err)=>{ console.error('[maze] websocket error', err); info.textContent='WebSocket error'; };
-  ws.onclose = (ev)=>{ console.warn('[maze] websocket closed', ev); info.textContent='Disconnected'; /* don't auto-reload; keep page for debugging */ };
+  ws.onclose = (ev)=>{ console.warn('[maze] websocket closed', ev); info.textContent='Disconnected'; };
 }).catch(e=>{ info.textContent='No backend /api/token'; });
 
 // init

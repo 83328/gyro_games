@@ -12,51 +12,54 @@ load_dotenv()
 AUTH_TOKEN = os.environ.get('GYRO_TOKEN')
 WS_URL = os.environ.get('WS_URL')
 
-# Store all connected WebSocket clients
-clients = set()
+
+# Store clients per room: {room_id: set(ws)}
+rooms = {}
 message_count = 0  # Counter for throttled logging
 
 async def websocket_handler(request):
+
     # Basic token check: require ?token=...
     token = request.rel_url.query.get('token')
+    room_id = request.rel_url.query.get('room')
     if token != AUTH_TOKEN:
         print(f"[!] WebSocket auth failed from {request.remote} - token={token!r} expected={AUTH_TOKEN!r}")
         return web.Response(status=401, text='Unauthorized')
+    if not room_id or not isinstance(room_id, str) or len(room_id) != 3:
+        return web.Response(status=400, text='Missing or invalid room id')
 
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
     peer = request.remote
-    print(f"[+] Client connected: {peer}")
-    clients.add(ws)  # Add client to set
+    print(f"[+] Client connected: {peer} room={room_id}")
+    # Add client to room
+    if room_id not in rooms:
+        rooms[room_id] = set()
+    rooms[room_id].add(ws)
 
     try:
         async for msg in ws:
             try:
                 if msg.type == web.WSMsgType.TEXT:
-                    # Forward text frames unchanged to all clients
-                    # print(f"[RX TEXT] from {peer}: {msg.data[:200]}")  # Commented out for performance
-                    
-                    # Optional: throttled logging (every 50th message)
                     global message_count
                     message_count += 1
                     if message_count % 50 == 0:
-                        print(f"[RX TEXT #{message_count}] from {peer}: {msg.data[:100]}...")
-                    
-                    for client in list(clients):
+                        print(f"[RX TEXT #{message_count}] from {peer} room={room_id}: {msg.data[:100]}...")
+                    # Relay only to clients in the same room
+                    for client in list(rooms.get(room_id, [])):
                         if client.closed:
-                            clients.discard(client)
+                            rooms[room_id].discard(client)
                             continue
                         try:
                             await client.send_str(msg.data)
                         except Exception as e:
                             print(f"[!] Failed to send TEXT to client {client}: {e}")
                 elif msg.type == web.WSMsgType.BINARY:
-                    # Forward binary frames unchanged
-                    print(f"[RX BINARY] from {peer}: {len(msg.data)} bytes")
-                    for client in list(clients):
+                    print(f"[RX BINARY] from {peer} room={room_id}: {len(msg.data)} bytes")
+                    for client in list(rooms.get(room_id, [])):
                         if client.closed:
-                            clients.discard(client)
+                            rooms[room_id].discard(client)
                             continue
                         try:
                             await client.send_bytes(msg.data)
@@ -65,12 +68,14 @@ async def websocket_handler(request):
                 elif msg.type == web.WSMsgType.ERROR:
                     print('WebSocket connection closed with exception %s' % ws.exception())
                 else:
-                    print(f"[RX] msg.type={msg.type} from {peer}")
+                    print(f"[RX] msg.type={msg.type} from {peer} room={room_id}")
             except Exception as inner:
-                print(f"[!] Error processing message from {peer}: {inner}")
+                print(f"[!] Error processing message from {peer} room={room_id}: {inner}")
     finally:
-        print(f"[-] Client disconnected: {peer} code={getattr(ws, 'close_code', None)}")
-        clients.discard(ws)  # Remove client on disconnect
+        print(f"[-] Client disconnected: {peer} room={room_id} code={getattr(ws, 'close_code', None)}")
+        rooms[room_id].discard(ws)
+        if not rooms[room_id]:
+            del rooms[room_id]
 
     return ws
 

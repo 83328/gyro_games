@@ -87,10 +87,22 @@ let latestOrientation = {alpha: null, beta: null, gamma: null};
 
 function log(s){ console.debug('[gyro]', s); }
 
+// Room id extraction from URL
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if(room && /^[A-Z]{3}$/.test(room)) return room;
+  // fallback: generate random room if missing (shouldn't happen from QR)
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+const ROOM_ID = getRoomId();
 
 function buildWsUrl() {
   const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
-  return `${proto}://${location.host}/ws?token=${encodeURIComponent(AUTH_TOKEN)}`;
+  return `${proto}://${location.host}/ws?token=${encodeURIComponent(AUTH_TOKEN)}&room=${ROOM_ID}`;
 }
 
 // Fetch token from backend before starting
@@ -124,7 +136,6 @@ function openSocket() {
 
 function handleMotion(e) {
   if (!listening) return;
-  // simple throttle: limit to ~10Hz (100ms)
   const now = Date.now();
   if (!window._lastGyroSent) window._lastGyroSent = 0;
   const MIN_SEND_MS = 100;
@@ -135,24 +146,19 @@ function handleMotion(e) {
   function fmt(v){
     if (v === null || v === undefined) return null;
     if (typeof v !== 'number') return v;
-    // round to 4 decimals
     return Number(v.toFixed(4));
   }
-  // minimal payload: timestamp and beta only
+  // Add room id to payload
   const payload = {
     t: Date.now(),
-    // gyro rotation rates (deg/s)
     beta: fmt(r.beta || 0),
     gamma: fmt(r.gamma || 0),
-    // orientation angles (deg) when available — more stable for tilt controls
     orientAlpha: fmt(latestOrientation.alpha),
     orientBeta: fmt(latestOrientation.beta),
     orientGamma: fmt(latestOrientation.gamma),
-    // acceleration (m/s^2) — can be used for flick/momentum controls
     ax: fmt(acc.x || 0),
     ay: fmt(acc.y || 0),
     az: fmt(acc.z || 0),
-    // send short role codes to reduce bandwidth: b/r/y/g/o/p/c/m
     role: (
       role === 'blue' ? 'b' :
       role === 'red' ? 'r' :
@@ -162,13 +168,13 @@ function handleMotion(e) {
       role === 'purple' ? 'p' :
       role === 'cyan' ? 'c' :
       role === 'magenta' ? 'm' : role
-    )
+    ),
+    room: ROOM_ID
   };
   const s = JSON.stringify(payload);
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(s);
   }
-  // throttle logs to once every 20 sends to avoid flooding the UI
   sendCount += 1;
   if (sendCount % 20 === 0) {
     log('sent: ' + s);

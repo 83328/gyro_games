@@ -322,18 +322,33 @@ function step(dt){
   }
 }
 
-// websocket hookup — reuse /api/token
+// Room id extraction from URL
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if (!room || room.length !== 3) {
+    room = 'DEF'; // fallback
+  }
+  return room.toUpperCase();
+}
+const ROOM_ID = getRoomId();
+
+// websocket hookup  reuse /api/token
 let ws = null;
 fetch('/api/token').then(r=>r.json()).then(data=>{
   const token = data.token;
   const proto = (location.protocol==='https:')?'wss':'ws';
-  const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  let wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token):data.ws_url+'?token='+encodeURIComponent(token)) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  // Add room id to wsUrl
+  wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
   ws.onopen = ()=>{ msg.textContent='Connected'; };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d || d.role==null) return;
+      // Only process messages for this room
+      if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
       // normalize short role codes (b/r/y/g/o/p/c/m -> blue/red/yellow/green/orange/purple/cyan/magenta)
       if(typeof d.role === 'string' && d.role.length === 1){
         d.role = (

@@ -51,14 +51,34 @@
   </div>
 </body>
 <script>
-  // build a QR for the current host. Option: use root (/) or full index.html path
+  // Generate a random three-letter room code
+  function randomRoomCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let code = '';
+    for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+  const roomCode = randomRoomCode();
+
   const qrImg = document.getElementById('qrImg');
   const useRoot = document.getElementById('useRoot');
   const copyBtn = document.getElementById('copyLink');
+
+  // Build a URL to the streaming page with ?room=ROOMCODE
   function buildUrl(){
-    if(useRoot.checked) return `${location.protocol}//${location.host}/`;
-    return `${location.protocol}//${location.host}${location.pathname}`;
+    return `${location.protocol}//${location.host}/gyro.html?room=${roomCode}`;
   }
+
+  // Update all game links to include ?room=ROOMCODE
+  function updateGameLinks() {
+    const links = document.querySelectorAll('.thumb-grid a');
+    links.forEach(link => {
+      const url = new URL(link.getAttribute('href'), location.origin);
+      url.searchParams.set('room', roomCode);
+      link.setAttribute('href', url.pathname + url.search);
+    });
+  }
+  updateGameLinks();
   function updateQr(){
     const u = buildUrl();
     // api.qrserver.com generates a PNG for free and supports size param
