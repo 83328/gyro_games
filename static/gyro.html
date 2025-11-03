@@ -131,11 +131,11 @@ function openSocket() {
   log('Connecting: ' + url);
   socket = new WebSocket(url);
   socket.onopen = () => {
-    statusEl.textContent = 'WebSocket connected';
+    statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`;
     log('WebSocket open');
   };
   socket.onclose = () => {
-    statusEl.textContent = 'WebSocket closed';
+    statusEl.textContent = `WebSocket closed, Room ID: ${ROOM_ID}`;
     log('WebSocket closed');
   };
   socket.onerror = (e) => {

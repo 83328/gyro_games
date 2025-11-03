@@ -234,7 +234,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ info.textContent = 'Connected'; startCountdown(); };
+  ws.onopen = ()=>{ info.textContent = `Connected, Room ID: ${ROOM_ID}`; startCountdown(); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data); if(!d) return;

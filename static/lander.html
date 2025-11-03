@@ -134,11 +134,16 @@ function initPlayers(){
   if(scoresHolder){
     // clear existing
     scoresHolder.innerHTML = '';
+    const roleColors = {
+      blue: '#4ea1ff', red: '#ff6b6b', yellow: '#ffd86b', green: '#8fe58f',
+      orange: '#ff9f4d', purple: '#b58cff', cyan: '#4de6e6', magenta: '#ff6bff'
+    };
     for(let i=0;i<n;i++){
       const role = ROLE_ORDER[i];
       const el = document.createElement('div');
       el.className = 'score';
       el.id = `${role}ScoreContainer`;
+      el.style.color = roleColors[role] || '#fff';
       el.innerHTML = `${role.charAt(0).toUpperCase()+role.slice(1)}: <span id="${role}Score">0</span>`;
       scoresHolder.appendChild(el);
     }
@@ -333,7 +338,7 @@ function getRoomId() {
 }
 const ROOM_ID = getRoomId();
 
-// websocket hookup  reuse /api/token
+// websocket hookup reuse /api/token
 let ws = null;
 fetch('/api/token').then(r=>r.json()).then(data=>{
   const token = data.token;
@@ -342,7 +347,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ msg.textContent='Connected'; };
+  ws.onopen = ()=>{ msg.textContent=`Connected, Room ID: ${ROOM_ID}`; };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);

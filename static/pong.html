@@ -7,8 +7,8 @@
     <style>
         body { font-family: Arial, sans-serif; background:#111; color:#eee; display:flex; flex-direction:column; align-items:center; padding:16px; }
         canvas { background:#222; border:2px solid #333; }
-        #status { margin:8px 0; color:#ffd700; }
-        #logs { width:80%; max-height:120px; overflow:auto; font-family:monospace; font-size:12px; background:#0f0f0f; padding:8px; border-radius:4px; }
+    #status { margin:8px 0; color:#fff; }
+    #logs { display:none; }
     </style>
 </head>
 <body>
@@ -18,8 +18,7 @@
         <div style="color:#4ea1ff">Blue: <span id="scoreBlue">0</span></div>
         <div style="color:#ff6b6b">Red: <span id="scoreRed">0</span></div>
     </div>
-    <canvas id="canvas" width="800" height="400"></canvas>
-    <div id="logs"></div>
+    <canvas id="canvas" width="600" height="500"></canvas>
 
     <script>
     const canvas = document.getElementById('canvas');
@@ -39,10 +38,10 @@
     const ROOM_ID = getRoomId();
 
     // Paddles
-    const paddleWidth = 120;
-    const paddleHeight = 16;
-    let blueX = canvas.width/2 - paddleWidth/2;
-    let redX = canvas.width/2 - paddleWidth/2;
+    const paddleWidth = 16;
+    const paddleHeight = 120;
+    let blueY = canvas.height/2 - paddleHeight/2;
+    let redY = canvas.height/2 - paddleHeight/2;
 
     // Ball
     const ballRadius = 10;
@@ -58,36 +57,36 @@
 
     function draw() {
         ctx.clearRect(0,0,canvas.width,canvas.height);
+        // Draw paddles left/right
         ctx.fillStyle = '#ff6b6b';
-        ctx.fillRect(redX, 4, paddleWidth, paddleHeight);
+        ctx.fillRect(4, redY, paddleWidth, paddleHeight);
         ctx.fillStyle = '#4ea1ff';
-        ctx.fillRect(blueX, canvas.height - paddleHeight - 4, paddleWidth, paddleHeight);
-        if (ballX - ballRadius < 0 || ballX + ballRadius > canvas.width) ballSpeedX = -ballSpeedX;
+        ctx.fillRect(canvas.width - paddleWidth - 4, blueY, paddleWidth, paddleHeight);
+        // Ball bounce on top/bottom
+        if (ballY - ballRadius < 0 || ballY + ballRadius > canvas.height) ballSpeedY = -ballSpeedY;
 
-        let redHit = false;
-        if (ballY + ballRadius > canvas.height - paddleHeight - 4 && ballX > blueX && ballX < blueX + paddleWidth) {
-            ballSpeedY = -Math.abs(ballSpeedY);
-            const hit = (ballX - blueX)/paddleWidth - 0.5;
-            ballSpeedX += hit*2;
+        let blueHit = false;
+        if (ballX - ballRadius < paddleWidth + 4 && ballY > redY && ballY < redY + paddleHeight) {
+            ballSpeedX = Math.abs(ballSpeedX);
+            const hit = (ballY - redY)/paddleHeight - 0.5;
+            ballSpeedY += hit*2;
         }
-        if (ballY - ballRadius < paddleHeight + 4 && ballX > redX && ballX < redX + paddleWidth) {
-            ballSpeedY = Math.abs(ballSpeedY);
-            const hit = (ballX - redX)/paddleWidth - 0.5;
-            ballSpeedX += hit*2;
-            redHit = true;
+        if (ballX + ballRadius > canvas.width - paddleWidth - 4 && ballY > blueY && ballY < blueY + paddleHeight) {
+            ballSpeedX = -Math.abs(ballSpeedX);
+            const hit = (ballY - blueY)/paddleHeight - 0.5;
+            ballSpeedY += hit*2;
+            blueHit = true;
         }
 
-        if (ballY - ballRadius > canvas.height) {
+        if (ballX - ballRadius > canvas.width) {
             redScore += 1;
             updateScoreUI();
             resetBall();
-            appendLog('Blue missed - point to Red');
         }
-        if (ballY - ballRadius < 0 && !redHit) {
+        if (ballX + ballRadius < 0 && !blueHit) {
             blueScore += 1;
             updateScoreUI();
             resetBall();
-            appendLog('Red missed - point to Blue');
         }
         ctx.beginPath();
         ctx.fillStyle = '#fff';
@@ -96,8 +95,8 @@
     }
 
     function updateBall() {
-        ballX += ballSpeedX;
-        ballY += ballSpeedY;
+    ballX += ballSpeedX;
+    ballY += ballSpeedY;
     }
 
     function appendLog(msg) {
@@ -115,34 +114,37 @@
     }
 
     function resetBall() {
-        ballX = canvas.width/2;
-        ballY = canvas.height/2;
-        ballSpeedX = 3*(Math.random()>0.5?1:-1);
-        ballSpeedY = (Math.random() > 0.5) ? -3 : 3;
+    ballX = canvas.width/2;
+    ballY = canvas.height/2;
+    ballSpeedX = 3*(Math.random()>0.5?1:-1);
+    ballSpeedY = 3*(Math.random()>0.5?1:-1);
     }
 
     function updatePaddle(beta, role='blue') {
         if (beta === undefined || beta === null) return;
+        // Use y (vertical position) for paddle movement instead of gamma
         const scale = 0.8;
-        const alpha = 0.12;
+        const alpha = 0.25;
         if (role === 'blue') {
             blueBetaHistory.push(beta);
             if (blueBetaHistory.length > smoothWindow) blueBetaHistory.shift();
             const avg = blueBetaHistory.reduce((a,b)=>a+b,0)/blueBetaHistory.length;
+            // Interpret beta as y (vertical position)
             const clamped = Math.max(-90, Math.min(90, avg*scale));
             const norm = (clamped + 90) / 180;
-            const target = norm * (canvas.width - paddleWidth);
-            blueX = blueX*(1-alpha) + target*alpha;
-            blueX = Math.max(0, Math.min(blueX, canvas.width - paddleWidth));
+            const target = norm * (canvas.height - paddleHeight);
+            blueY = blueY*(1-alpha) + target*alpha;
+            blueY = Math.max(0, Math.min(blueY, canvas.height - paddleHeight));
         } else if (role === 'red') {
             redBetaHistory.push(beta);
             if (redBetaHistory.length > smoothWindow) redBetaHistory.shift();
             const avg = redBetaHistory.reduce((a,b)=>a+b,0)/redBetaHistory.length;
+            // Interpret beta as y (vertical position)
             const clamped = Math.max(-90, Math.min(90, avg*scale));
             const norm = (clamped + 90) / 180;
-            const target = norm * (canvas.width - paddleWidth);
-            redX = redX*(1-alpha) + target*alpha;
-            redX = Math.max(0, Math.min(redX, canvas.width - paddleWidth));
+            const target = norm * (canvas.height - paddleHeight);
+            redY = redY*(1-alpha) + target*alpha;
+            redY = Math.max(0, Math.min(redY, canvas.height - paddleHeight));
         }
     }
 
@@ -181,7 +183,7 @@
         if (!wsUrl) return;
         try {
             ws = new WebSocket(wsUrl);
-            ws.onopen = () => { status.textContent = 'Connected'; };
+            ws.onopen = () => { status.textContent = `Connected, Room ID: ${ROOM_ID}`; };
             ws.onmessage = (ev) => {
                 try {
                     const d = JSON.parse(ev.data);

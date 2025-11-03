@@ -319,16 +319,29 @@ function appendLog(msg){
 
 function resetRound(){
   initMaze();
-  // place players at cell centers
-  // corners: blue bottom-left, red top-right, yellow bottom-right, green top-left
-  players.blue = {x:0,y:ROWS-1, px: (0+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0};
-  players.red  = {x:COLS-1,y:0, px: (COLS-1+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0};
-  if(activeRoles.includes('yellow')){ players.yellow = {x:COLS-1,y:ROWS-1, px: (COLS-1+0.5)*cell.w, py: (ROWS-1+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('green')){ players.green = {x:0,y:0, px: (0+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('orange')){ players.orange = {x:Math.floor(COLS/2), y:ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('purple')){ players.purple = {x:Math.floor(COLS/2), y:0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('cyan')){ players.cyan = {x:COLS-1, y:Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('magenta')){ players.magenta = {x:0, y:Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0}; }
+  // Helper to find nearest open cell to a target
+  function nearestOpenCell(tx, ty) {
+    let minDist = Infinity, best = {x:tx, y:ty};
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (maze[y][x] === 0) {
+          const d = Math.abs(x-tx) + Math.abs(y-ty);
+          if (d < minDist) { minDist = d; best = {x, y}; }
+        }
+      }
+    }
+    return best;
+  }
+  // place players at nearest open cell to their intended start
+  let pos;
+  pos = nearestOpenCell(0, ROWS-1); players.blue = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
+  pos = nearestOpenCell(COLS-1, 0); players.red = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
+  if(activeRoles.includes('yellow')){ pos = nearestOpenCell(COLS-1, ROWS-1); players.yellow = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('green')){ pos = nearestOpenCell(0, 0); players.green = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('orange')){ pos = nearestOpenCell(Math.floor(COLS/2), ROWS-1); players.orange = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('purple')){ pos = nearestOpenCell(Math.floor(COLS/2), 0); players.purple = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('cyan')){ pos = nearestOpenCell(COLS-1, Math.floor(ROWS/2)); players.cyan = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('magenta')){ pos = nearestOpenCell(0, Math.floor(ROWS/2)); players.magenta = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
   draw();
 }
 
@@ -361,8 +374,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   try{ ws.binaryType = 'arraybuffer'; }catch(e){}
 
   ws.onopen = ()=>{
-    console.log('[maze] ws open', wsUrl);
-    info.textContent='Connected';
+  console.log('[maze] ws open', wsUrl);
+  info.textContent = `Connected, Room ID: ${ROOM_ID}`;
   };
 
   ws.onmessage = async (ev)=>{
