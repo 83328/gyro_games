@@ -419,7 +419,7 @@ calibBtn.addEventListener('click', ()=>{
   setTimeout(()=>{ const msg2 = 'Connected'; if(window.__setRoomBadge) window.__setRoomBadge(msg2); else console.log(msg2); }, 1200);
 });
 
-restartBtn.addEventListener('click', ()=>{ resetGame(); const msg = 'Restarted'; if(window.__setRoomBadge) window.__setRoomBadge(msg); else console.log(msg); });
+restartBtn.addEventListener('click', ()=>{ resetGame(); console.log('Restarted'); });
 
 function updateHudSizes(){
   try{

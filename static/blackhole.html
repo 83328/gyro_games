@@ -39,9 +39,13 @@
       <option value="8">8 players</option>
     </select>
     <button id="newRound" style="margin-left:12px;display:none">New round</button>
-    Blue: <span id="sBlue">0</span> — Red: <span id="sRed">0</span>
-    <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
-    <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
+  <span id="blueScoreContainer">Blue: <span id="sBlue">0</span></span> — <span id="redScoreContainer">Red: <span id="sRed">0</span></span>
+  <span id="yellowScoreContainer" style="display:none"> — <span id="lblYellow">Yellow</span>: <span id="sYellow">0</span></span>
+  <span id="greenScoreContainer" style="display:none"> — <span id="lblGreen">Green</span>: <span id="sGreen">0</span></span>
+  <span id="orangeScoreContainer" style="display:none"> — <span id="lblOrange">Orange</span>: <span id="sOrange">0</span></span>
+  <span id="purpleScoreContainer" style="display:none"> — <span id="lblPurple">Purple</span>: <span id="sPurple">0</span></span>
+  <span id="cyanScoreContainer" style="display:none"> — <span id="lblCyan">Cyan</span>: <span id="sCyan">0</span></span>
+  <span id="magentaScoreContainer" style="display:none"> — <span id="lblMagenta">Magenta</span>: <span id="sMagenta">0</span></span>
   </div>
   <canvas id="c" width="700" height="600"></canvas>
 
@@ -64,11 +68,18 @@ const sBlue = document.getElementById('sBlue');
 const sRed = document.getElementById('sRed');
 const sYellow = document.getElementById('sYellow');
 const sGreen = document.getElementById('sGreen');
+const sOrange = document.getElementById('sOrange');
+const sPurple = document.getElementById('sPurple');
+const sCyan = document.getElementById('sCyan');
+const sMagenta = document.getElementById('sMagenta');
 
-const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f'};
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f', orange:'#ff9f4d', purple:'#b58cff', cyan:'#4de6e6', magenta:'#ff6bff'};
 let ws=null;
 let activeRoles = ['blue','red'];
-let scores = {blue:0,red:0,yellow:0,green:0};
+let scores = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
+
+// map for convenient score span updates
+const scoreSpans = { blue: sBlue, red: sRed, yellow: sYellow, green: sGreen, orange: sOrange, purple: sPurple, cyan: sCyan, magenta: sMagenta };
 let players = {};
 let bullets = [];
 let timeLeft = 60;
@@ -116,12 +127,9 @@ window.addEventListener('resize', resizeCanvasToDisplay);
 
 // init players
 function initPlayers(){
-  const n = parseInt(playerCountSel.value,10);
-  activeRoles = ['blue','red'];
-  if(n>=3){activeRoles.push('yellow'); yellowScoreContainer.style.display='';}
-  else yellowScoreContainer.style.display='none';
-  if(n>=4){activeRoles.push('green'); greenScoreContainer.style.display='';}
-  else greenScoreContainer.style.display='none';
+  const n = Math.max(2, Math.min(8, parseInt(playerCountSel.value,10)));
+  const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  activeRoles = possible.slice(0, n);
 
   players={};
   bullets=[];
@@ -144,6 +152,28 @@ function initPlayers(){
   }
   timeLeft = 60;
   roundRunning = true;
+  // Color HUD labels and numeric spans for quick scanning
+  const containers = {
+    blue: document.getElementById('blueScoreContainer'),
+    red: document.getElementById('redScoreContainer'),
+    yellow: document.getElementById('yellowScoreContainer'),
+    green: document.getElementById('greenScoreContainer'),
+    orange: document.getElementById('orangeScoreContainer'),
+    purple: document.getElementById('purpleScoreContainer'),
+    cyan: document.getElementById('cyanScoreContainer'),
+    magenta: document.getElementById('magentaScoreContainer')
+  };
+  const spans = { blue: sBlue, red: sRed, yellow: sYellow, green: sGreen };
+  for(const role of Object.keys(containers)){
+    const c = containers[role];
+    if(c && activeRoles.includes(role)){
+      c.style.display = '';
+      c.style.color = colors[role];
+      if(spans[role]) spans[role].style.color = colors[role];
+    } else if(c){
+      c.style.display = 'none';
+    }
+  }
 }
 initPlayers();
 playerCountSel.addEventListener('change',()=>initPlayers());
@@ -326,10 +356,7 @@ function step(dt){
         const hitR = Math.max(12, 12 * SHIP_SCALE); // px
         if(dx*dx+dy*dy < (hitR * hitR)){
         scores[b.owner]++;
-        if(b.owner==='blue') sBlue.textContent=scores[b.owner];
-        if(b.owner==='red') sRed.textContent=scores[b.owner];
-        if(b.owner==='yellow') sYellow.textContent=scores[b.owner];
-        if(b.owner==='green') sGreen.textContent=scores[b.owner];
+        const span = scoreSpans[b.owner]; if(span) span.textContent = scores[b.owner];
         bullets.splice(i,1);
         break;
       }
@@ -476,7 +503,10 @@ if(newRoundBtn){
     powerup = null;
     // reset scores to zero for active roles
     for(const r of Object.keys(scores)) scores[r]=0;
-    sBlue.textContent = 0; sRed.textContent = 0; sYellow.textContent=0; sGreen.textContent=0;
+    // clear all score spans via the scoreSpans mapping
+    for(const k of Object.keys(scoreSpans)){
+      const sp = scoreSpans[k]; if(sp) sp.textContent = 0;
+    }
     if(newRoundBtn) newRoundBtn.style.display='none';
     appendLog('New round');
     initPlayers();
