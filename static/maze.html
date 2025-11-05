@@ -201,6 +201,74 @@ function initMaze(){
     }
   }
   carve(0, ROWS-1);
+  // Ensure goal cells are open and reachable from the primary start.
+  // Helper: nearest open cell (reuse local logic)
+  function nearestOpenCellLocal(tx, ty) {
+    let minDist = Infinity, best = {x:tx, y:ty};
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (maze[y][x] === 0) {
+          const d = Math.abs(x-tx) + Math.abs(y-ty);
+          if (d < minDist) { minDist = d; best = {x, y}; }
+        }
+      }
+    }
+    return best;
+  }
+  // local wrapper uses global corridor carving function (defined below)
+  function carvePath(ax,ay,bx,by){ carveCorridor(ax,ay,bx,by,1); }
+  // BFS from primary start to mark reachable open cells
+  const startCell = nearestOpenCellLocal(0, ROWS-1);
+  const visited = Array(ROWS).fill(0).map(()=>Array(COLS).fill(false));
+  const qq = [startCell];
+  if(maze[startCell.y][startCell.x]===0) visited[startCell.y][startCell.x]=true;
+  while(qq.length){
+    const cur = qq.shift();
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for(const [dx,dy] of dirs){
+      const nx = cur.x + dx, ny = cur.y + dy;
+      if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && !visited[ny][nx] && maze[ny][nx]===0){ visited[ny][nx]=true; qq.push({x:nx,y:ny}); }
+    }
+  }
+  // All potential goal coords we want reachable
+  const midX = Math.floor(COLS/2), midY = Math.floor(ROWS/2);
+  const goals = [ [COLS-1,0], [0,ROWS-1], [0,0], [COLS-1,ROWS-1], [midX,0], [midX,ROWS-1], [0,midY], [COLS-1,midY] ];
+  for(const [gx,gy] of goals){
+    // ensure the goal cell itself is open
+    if(gx>=0 && gx<COLS && gy>=0 && gy<ROWS) maze[gy][gx]=0;
+    // if not visited (not reachable from start), carve connector from nearest visited cell
+    if(!(gx>=0 && gx<COLS && gy>=0 && gy<ROWS) || !visited[gy][gx]){
+      // find nearest visited cell
+      let minD = Infinity, best = null;
+      for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++) if(visited[y][x]){
+        const d = Math.abs(x-gx)+Math.abs(y-gy);
+        if(d < minD){ minD = d; best = {x,y}; }
+      }
+      if(best){
+        carvePath(best.x, best.y, gx, gy);
+        // mark newly carved cells as visited for subsequent goals
+        const q2 = [ {x:best.x, y:best.y} ]; visited[best.y][best.x]=true;
+        while(q2.length){
+          const cur = q2.shift();
+          const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+          for(const [dx,dy] of dirs){
+            const nx = cur.x + dx, ny = cur.y + dy;
+            if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && !visited[ny][nx] && maze[ny][nx]===0){ visited[ny][nx]=true; q2.push({x:nx,y:ny}); }
+          }
+        }
+      }
+    }
+  }
+}
+
+// carve a Manhattan corridor between two grid cells with optional thickness
+function carveCorridor(ax,ay,bx,by,thickness){
+  const tx = ax, ty = ay, gx = bx, gy = by;
+  let x = tx, y = ty; maze[y][x]=0;
+  const stepX = (gx>tx)?1:((gx<tx)?-1:0);
+  const stepY = (gy>ty)?1:((gy<ty)?-1:0);
+  while(x !== gx){ x += stepX; for(let oy = -thickness; oy<=thickness; oy++){ const yy = y+oy; if(yy>=0 && yy<ROWS) maze[yy][x]=0; } }
+  while(y !== gy){ y += stepY; for(let ox = -thickness; ox<=thickness; ox++){ const xx = x+ox; if(xx>=0 && xx<COLS) maze[y][xx]=0; } }
 }
 
 function draw(){
@@ -369,6 +437,43 @@ function resetRound(){
   if(activeRoles.includes('cyan')){ pos = reachableNearestOpenCell(COLS-1, Math.floor(ROWS/2), 0, Math.floor(ROWS/2)); players.cyan = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
   if(activeRoles.includes('magenta')){ pos = reachableNearestOpenCell(0, Math.floor(ROWS/2), COLS-1, Math.floor(ROWS/2)); players.magenta = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
   draw();
+
+  // Ensure each player's start can actually reach their goal. If not, carve a direct connector.
+  function pathExists(sx,sy,gx,gy){
+    if(!(sx>=0 && sx<COLS && sy>=0 && sy<ROWS) || !(gx>=0 && gx<COLS && gy>=0 && gy<ROWS)) return false;
+    if(maze[sy][sx]===1 || maze[gy][gx]===1) return false;
+    const vis = Array(ROWS).fill(0).map(()=>Array(COLS).fill(false));
+    const q = [{x:sx,y:sy}]; vis[sy][sx]=true;
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    while(q.length){
+      const cur = q.shift();
+      if(cur.x===gx && cur.y===gy) return true;
+      for(const [dx,dy] of dirs){
+        const nx = cur.x+dx, ny = cur.y+dy;
+        if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && !vis[ny][nx] && maze[ny][nx]===0){ vis[ny][nx]=true; q.push({x:nx,y:ny}); }
+      }
+    }
+    return false;
+  }
+  // mapping of goals
+  const midX2 = Math.floor(COLS/2), midY2 = Math.floor(ROWS/2);
+  const goalMap = {
+    blue: {x:COLS-1,y:0}, red:{x:0,y:ROWS-1}, yellow:{x:0,y:0}, green:{x:COLS-1,y:ROWS-1},
+    orange:{x:midX2,y:0}, purple:{x:midX2,y:ROWS-1}, cyan:{x:0,y:midY2}, magenta:{x:COLS-1,y:midY2}
+  };
+  for(const role of Object.keys(players)){
+    if(!activeRoles.includes(role)) continue;
+    const p = players[role];
+    const g = goalMap[role];
+    if(!g) continue;
+    if(!pathExists(p.x,p.y,g.x,g.y)){
+      // carve a connector between the player's start and the goal to guarantee reachability
+      carveCorridor(p.x,p.y,g.x,g.y,1);
+      // update pixel positions after carving
+      p.px = (p.x + 0.5) * cell.w;
+      p.py = (p.y + 0.5) * cell.h;
+    }
+  }
 }
 
 // Room id extraction from URL
