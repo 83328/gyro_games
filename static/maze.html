@@ -8,13 +8,11 @@
   html,body{height:100%;}
   body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:20px 20px 36px 20px;margin:0;box-sizing:border-box;overflow:hidden}
   canvas{background:#222;border:2px solid #333;display:block}
-  #info{margin:8px}
   #scores{margin:8px}
 </style>
 </head>
 <body>
   <h1>Maze Runner</h1>
-  <div id="info">Connecting...</div>
   <div id="scores" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <span>Players:</span>
     <select id="playerCount" style="margin:0 8px">
@@ -39,7 +37,7 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+// note: #info element removed from DOM to avoid duplicate status; appendLog will query it if present
 const sBlue = document.getElementById('sBlue');
 const sRed = document.getElementById('sRed');
 const sYellowEl = document.getElementById('sYellow');
@@ -184,18 +182,6 @@ let lastDeviceOrientation = null;
 // rotationRate integration state per role with timestamp
 const rotState = {};
 
-// debug overlay
-const debugEl = document.createElement('div');
-debugEl.style.position = 'fixed';
-debugEl.style.right = '8px';
-debugEl.style.top = '8px';
-debugEl.style.background = 'rgba(0,0,0,0.5)';
-debugEl.style.color = '#fff';
-debugEl.style.padding = '6px';
-debugEl.style.fontSize = '12px';
-debugEl.style.zIndex = 9999;
-document.body.appendChild(debugEl);
-
 // try load calibration from localStorage
 try{ const stored = localStorage.getItem('gyro_maze_calib'); if(stored){ calibration = JSON.parse(stored); appendLog('Loaded calibration'); } }catch(e){}
 
@@ -314,7 +300,12 @@ function checkGoal(role){
 }
 
 function appendLog(msg){
-  info.textContent = msg;
+  // Query the element at runtime so the code remains robust if #info is re-added.
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log('[maze] ' + msg);
+  }catch(e){ console.log('[maze][appendLog] ', msg); }
 }
 
 function resetRound(){
@@ -358,6 +349,17 @@ function getRoomId() {
 }
 // ROOM_ID is now only declared once below
 const ROOM_ID = getRoomId();
+// unified room badge: create if missing and expose helper to update status
+(function(){
+  let rb = document.getElementById('roomBadge');
+  if(!rb){
+    rb = document.createElement('div'); rb.id = 'roomBadge';
+    rb.style.cssText = 'position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000';
+    document.body.appendChild(rb);
+  }
+  rb.textContent = `Room: ${ROOM_ID}`;
+  window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
+})();
 
 let ws=null;
 fetch('/api/token').then(r=>r.json()).then(data=>{
@@ -375,7 +377,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 
   ws.onopen = ()=>{
   console.log('[maze] ws open', wsUrl);
-  info.textContent = `Connected, Room ID: ${ROOM_ID}`;
+  appendLog(`Connected, Room ID: ${ROOM_ID}`);
+  if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
   };
 
   ws.onmessage = async (ev)=>{
@@ -452,9 +455,9 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     }
   };
 
-  ws.onerror = (err)=>{ console.error('[maze] websocket error', err); info.textContent='WebSocket error'; };
-  ws.onclose = (ev)=>{ console.warn('[maze] websocket closed', ev); info.textContent='Disconnected'; };
-}).catch(e=>{ info.textContent='No backend /api/token'; });
+  ws.onerror = (err)=>{ console.error('[maze] websocket error', err); appendLog('WebSocket error'); if(window.__setRoomBadge) window.__setRoomBadge('WebSocket error'); };
+  ws.onclose = (ev)=>{ console.warn('[maze] websocket closed', ev); appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); };
+}).catch(e=>{ appendLog('No backend /api/token'); });
 
 // init
 initMaze();
@@ -505,8 +508,6 @@ let lastTs = performance.now();
 function frame(now){
   const dt = Math.min(40, now - lastTs) / 1000; // seconds, clamp
   lastTs = now;
-  // update debug overlay
-  debugEl.textContent = `orient:${orientationAvailable? 'yes':'no'}\nlast β:${(lastDeviceOrientation && lastDeviceOrientation.beta)? lastDeviceOrientation.beta.toFixed(2): 'n/a'} γ:${(lastDeviceOrientation && lastDeviceOrientation.gamma)? lastDeviceOrientation.gamma.toFixed(2): 'n/a'}\ncalib β:${(calibration && calibration.beta)?calibration.beta.toFixed(2):'0'} γ:${(calibration && calibration.gamma)?calibration.gamma.toFixed(2):'0'}`;
   // integrate velocities -> positions
   for(const role of activeRoles){
     const p = players[role];

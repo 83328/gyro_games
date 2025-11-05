@@ -37,6 +37,13 @@
     }
     const ROOM_ID = getRoomId();
 
+        (function(){
+            let rb = document.getElementById('roomBadge');
+            if(!rb){ rb = document.createElement('div'); rb.id='roomBadge'; rb.style.cssText='position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000'; document.body.appendChild(rb); }
+            rb.textContent = `Room: ${ROOM_ID}`;
+            window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
+        })();
+
     // Paddles
     const paddleWidth = 16;
     const paddleHeight = 120;
@@ -183,7 +190,7 @@
         if (!wsUrl) return;
         try {
             ws = new WebSocket(wsUrl);
-            ws.onopen = () => { status.textContent = `Connected, Room ID: ${ROOM_ID}`; };
+            ws.onopen = () => { status.textContent = `Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
             ws.onmessage = (ev) => {
                 try {
                     const d = JSON.parse(ev.data);
@@ -199,8 +206,8 @@
                     if (d.beta !== undefined) updatePaddle(d.beta, d.role);
                 } catch(e) { /* ignore parse errors */ }
             };
-            ws.onclose = () => { status.textContent = 'Disconnected'; setTimeout(connect,3000); };
-            ws.onerror = () => { status.textContent = 'WS error'; };
+            ws.onclose = () => { status.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(connect,3000); };
+            ws.onerror = () => { status.textContent = 'WS error'; if(window.__setRoomBadge) window.__setRoomBadge('WebSocket error'); };
         } catch(e) {
             status.textContent = 'WS failed';
         }

@@ -328,6 +328,14 @@ function getRoomId() {
 }
 const ROOM_ID = getRoomId();
 
+// unified room badge helper
+(function(){
+  let rb = document.getElementById('roomBadge');
+  if(!rb){ rb = document.createElement('div'); rb.id='roomBadge'; rb.style.cssText='position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000'; document.body.appendChild(rb); }
+  rb.textContent = `Room: ${ROOM_ID}`;
+  window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
+})();
+
 // --- WebSocket hookup ---
 fetch('/api/token').then(r=>r.json()).then(data=>{
   const token=data.token;
@@ -338,7 +346,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>info.textContent=`Connected, Room ID: ${ROOM_ID}`;
+  ws.onopen=()=>{ info.textContent=`Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
   ws.onmessage=ev=>{
     try{
       const d=JSON.parse(ev.data);
@@ -362,7 +370,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose=()=>{info.textContent='Disconnected';setTimeout(()=>location.reload(),2000);};
+  ws.onclose=()=>{info.textContent='Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
 }).catch(e=>{info.textContent='No backend /api/token';});
 
 // init

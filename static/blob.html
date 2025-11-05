@@ -116,6 +116,14 @@ function getRoomId() {
 }
 const ROOM_ID = getRoomId();
 
+// create unified room badge and helper
+(function(){
+  let rb = document.getElementById('roomBadge');
+  if(!rb){ rb = document.createElement('div'); rb.id='roomBadge'; rb.style.cssText='position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000'; document.body.appendChild(rb); }
+  rb.textContent = `Room: ${ROOM_ID}`;
+  window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
+})();
+
 // websocket hookup
 let ws = null;
 fetch('/api/token').then(r=>r.json()).then(data=>{
@@ -123,7 +131,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto = (location.protocol==='https:')?'wss':'ws';
   const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`; };
+  ws.onopen = ()=>{ statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
@@ -156,7 +164,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose = ()=>{ statusEl.textContent = 'Disconnected'; };
+  ws.onclose = ()=>{ statusEl.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); };
 }).catch(e=>{ statusEl.textContent = 'No backend'; });
 
 // keyboard fallback for testing
