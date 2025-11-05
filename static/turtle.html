@@ -31,7 +31,7 @@
 </head>
 <body>
   <h1>Turtle Race</h1>
-  <div id="info">Connecting...</div>
+  
   <div id="scores">
     Players:
     <select id="playerCount" style="margin:0 8px">
@@ -62,7 +62,25 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+
+// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
+// Room id extraction from URL - defined early so startCountdown() can use ROOM_ID
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if (!room || room.length !== 3) {
+    room = 'DEF'; // fallback
+  }
+  return room.toUpperCase();
+}
+const ROOM_ID = getRoomId();
 const playerCountSel = document.getElementById('playerCount');
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
@@ -132,7 +150,7 @@ function startCountdown(){
   const msgSub = document.getElementById('msgSub');
   msg.style.display = 'flex';
   msgMain.textContent = countdown;
-  msgSub.textContent = info.textContent || `Room ${ROOM_ID}`;
+  msgSub.textContent = (document.getElementById('info') ? document.getElementById('info').textContent : `Room ${ROOM_ID}`);
   clearInterval(countdownTimer);
   countdownTimer = setInterval(()=>{
     countdown--;
@@ -207,8 +225,8 @@ function step(dt){
     
     // check finish line
     if(p.x >= track.length+40){
-  raceRunning=false;
-  scores[role]++;
+    raceRunning=false;
+    scores[role]++;
   // refresh all score displays so newly visible ones show correct values
   sBlue.textContent = scores.blue;
   sRed.textContent = scores.red;
@@ -218,7 +236,7 @@ function step(dt){
   if(typeof sPurple !== 'undefined') sPurple.textContent = scores.purple;
   if(typeof sCyan !== 'undefined') sCyan.textContent = scores.cyan;
   if(typeof sMagenta !== 'undefined') sMagenta.textContent = scores.magenta;
-  info.textContent = `${role} wins the race!`;
+  appendLog(`${role} wins the race!`);
       setTimeout(()=>resetRace(),3000);
     }
   }
@@ -229,16 +247,6 @@ function resetRace(){
   initPlayers();
 }
 
-// Room id extraction from URL
-function getRoomId() {
-  const params = new URLSearchParams(window.location.search);
-  let room = params.get('room');
-  if (!room || room.length !== 3) {
-    room = 'DEF'; // fallback
-  }
-  return room.toUpperCase();
-}
-const ROOM_ID = getRoomId();
 // ensure unified room badge helper exists (in case file was edited earlier)
 (function(){
   let rb = document.getElementById('roomBadge');
@@ -255,7 +263,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ info.textContent = `Connected, Room ID: ${ROOM_ID}`; const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; startCountdown(); };
+  ws.onopen = ()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); startCountdown(); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data); if(!d) return;
@@ -278,8 +286,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       else if(d.orientBeta!==undefined && d.orientGamma!==undefined){ handleInput(d.role, d.orientBeta, d.orientGamma); }
     }catch(e){}
   };
-  ws.onclose = ()=>{ info.textContent = 'Disconnected'; const ms = document.getElementById('msgSub'); if(ms) ms.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
-}).catch(e=>{ info.textContent = 'No backend /api/token'; });
+  ws.onclose = ()=>{ appendLog('Disconnected'); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000); };
+}).catch(e=>{ appendLog('No backend /api/token'); });
 
 let last=performance.now();
 function frame(now){

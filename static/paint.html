@@ -26,7 +26,7 @@
 </head>
 <body>
   <h1>Paint</h1>
-  <div id="info">Connecting...</div>
+  
   <div id="scores">
     <label for="playerCount" style="font-weight:600;margin-right:4px;">Players:</label>
     <select id="playerCount" style="margin-right:8px">
@@ -55,7 +55,15 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+
+// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
 const playerCountSel = document.getElementById('playerCount');
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
@@ -324,13 +332,13 @@ function startRoundTimer() {
   if(timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(()=>{
     timeLeft--;
-    info.textContent = `Time left: ${timeLeft}s`;
+    appendLog(`Time left: ${timeLeft}s`);
     if(timeLeft <= 0) {
       clearInterval(timerInterval);
       endRound();
     }
   }, 1000);
-  info.textContent = `Time left: ${timeLeft}s`;
+  appendLog(`Time left: ${timeLeft}s`);
 }
 
 function endRound() {
@@ -342,14 +350,14 @@ function endRound() {
     if(scores[r] > maxScore) { maxScore = scores[r]; winners = [r]; }
     else if(scores[r] === maxScore) { winners.push(r); }
   }
-  if(winners.length === 1) {
+    if(winners.length === 1) {
     showWinOverlay(winners[0]);
-    info.textContent = `${winners[0].charAt(0).toUpperCase()+winners[0].slice(1)} wins!`;
+    appendLog(`${winners[0].charAt(0).toUpperCase()+winners[0].slice(1)} wins!`);
   } else {
     winOverlay.style.background = '#fff';
     winOverlay.textContent = `Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}!`;
     winOverlay.style.display = 'flex';
-    info.textContent = `Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}`;
+    appendLog(`Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}`);
     setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
   }
 }
@@ -398,8 +406,9 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws = new WebSocket(wsUrl);
   ws.onopen = ()=> {
-    info.textContent = `Connected, Room ID: ${ROOM_ID}`;
+    appendLog(`Connected, Room ID: ${ROOM_ID}`);
     const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = `Connected — Room ID: ${ROOM_ID}`;
+    if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room ID: ${ROOM_ID}`);
   };
   ws.onmessage = ev => {
     try {
@@ -429,8 +438,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     } catch(e){}
   };
-  ws.onclose = ()=>{ info.textContent='Disconnected'; const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
-}).catch(e=>{ info.textContent='No backend /api/token'; });
+  ws.onclose = ()=>{ appendLog('Disconnected'); const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000); };
+}).catch(e=>{ appendLog('No backend /api/token'); });
 
 </script>
 </body>

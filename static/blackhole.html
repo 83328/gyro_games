@@ -26,7 +26,7 @@
 </head>
 <body>
   <h1>Blackhole Blasters</h1>
-  <div id="info">Connecting...</div>
+  
   <div id="scores">
     Players:
     <select id="playerCount" style="margin:0 8px">
@@ -48,7 +48,15 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+
+// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
 const playerCountSel = document.getElementById('playerCount');
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
@@ -235,7 +243,7 @@ function step(dt){
     if(maxScore <= 0){ gameMessage = "Time's up! No score."; }
     else if(winners.length===1){ gameMessage = `Time's up! Winner: ${winners[0].toUpperCase()} (${maxScore})`; }
     else { gameMessage = `Time's up! Tie: ${winners.map(w=>w.toUpperCase()).join(', ')} (${maxScore})`; }
-    info.textContent = gameMessage;
+  appendLog(gameMessage);
     // show New round button to allow manual restart
     if(newRoundBtn) newRoundBtn.style.display='';
   }
@@ -356,7 +364,7 @@ function step(dt){
           p.fireMultiplier = 2;
           p.powerupUntil = performance.now()/1000 + 5.0;
           powerup = null;
-          info.textContent = `${role} picked up Rapid Fire!`;
+          appendLog(`${role} picked up Rapid Fire!`);
           break;
         }
       }
@@ -422,7 +430,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto=(location.protocol==='https:')?'wss':'ws';
   const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{info.textContent='Connected'; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);};
+  ws.onopen=()=>{appendLog('Connected'); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);};
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
@@ -449,8 +457,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose=()=>{info.textContent='Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
-}).catch(e=>{info.textContent='No backend /api/token';});
+  ws.onclose=()=>{appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{appendLog('No backend /api/token');});
 
 let last=performance.now();
 function frame(now){
@@ -470,7 +478,7 @@ if(newRoundBtn){
     for(const r of Object.keys(scores)) scores[r]=0;
     sBlue.textContent = 0; sRed.textContent = 0; sYellow.textContent=0; sGreen.textContent=0;
     if(newRoundBtn) newRoundBtn.style.display='none';
-    info.textContent = 'New round';
+    appendLog('New round');
     initPlayers();
   });
 }

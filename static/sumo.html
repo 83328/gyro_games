@@ -40,7 +40,7 @@
   <div id="splash" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;align-items:center;justify-content:center;background:#000;">
     <span id="splashText" style="font-size:4em;font-weight:bold;color:#fff;text-shadow:0 0 24px #000"></span>
   </div>
-  <div id="info">Connecting...</div>
+  
   <div id="scores">
     Players:
     <select id="playerCount" style="margin:0 8px">
@@ -71,7 +71,15 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+
+// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
 const playerCountSel = document.getElementById('playerCount');
 const calibBtn = document.getElementById('calibBtn');
 const sBlue = document.getElementById('sBlue');
@@ -195,9 +203,9 @@ calibBtn.addEventListener('click', ()=>{
     calibration.gamma = lastDeviceOrientation.gamma || 0;
     calibration.has = true;
     try{ localStorage.setItem('gyro_sumo_calib', JSON.stringify(calibration)); }catch(e){}
-    info.textContent = 'Calibrated!';
+    appendLog('Calibrated!');
   } else {
-    info.textContent = 'No orientation available to calibrate.';
+    appendLog('No orientation available to calibrate.');
   }
 });
 
@@ -280,7 +288,7 @@ function checkArena(){
     const dist = Math.sqrt(dx*dx + dy*dy);
     if(dist > arena.radius + RADIUS) { // fully out
       p.alive = false;
-      info.textContent = `${role} fell off!`;
+      appendLog(`${role} fell off!`);
     }
   }
 }
@@ -300,7 +308,7 @@ function checkWinner(){
     if(typeof sPurple !== 'undefined') sPurple.textContent = scores.purple;
     if(typeof sCyan !== 'undefined') sCyan.textContent = scores.cyan;
     if(typeof sMagenta !== 'undefined') sMagenta.textContent = scores.magenta;
-    info.textContent = `${winner} wins the round!`;
+    appendLog(`${winner} wins the round!`);
     showSplash(winner);
     setTimeout(()=>{ hideSplash(); resetRound(); }, 3000);
   }
@@ -319,7 +327,7 @@ function hideSplash() {
   splash.style.display = 'none';
 }
   if(alive.length === 0){
-    info.textContent = `All fell off! Restarting...`;
+    appendLog(`All fell off! Restarting...`);
     setTimeout(()=>{ resetRound(); }, 2000);
   }
 }
@@ -357,7 +365,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{info.textContent=`Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);};
+  ws.onopen=()=>{appendLog(`Connected, Room ID: ${ROOM_ID}`); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);};
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
@@ -391,8 +399,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose=()=>{info.textContent='Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
-}).catch(e=>{info.textContent='No backend /api/token';});
+  ws.onclose=()=>{appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{appendLog('No backend /api/token');});
 
 let last=performance.now();
 function frame(now){

@@ -28,7 +28,7 @@
 </head>
 <body>
   <h1 style="margin-bottom:4px">Moon Lander</h1>
-  <div id="connectionStatus" style="margin-bottom:8px;color:#fff;font-size:16px"></div>
+  
   <div class="hud">
     <label style="margin-left:8px">Players:
       <select id="playerCount" style="margin-left:6px">
@@ -53,6 +53,14 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const msg = document.getElementById('msg');
+// runtime-safe logger: attempts to write to #connectionStatus if present, otherwise falls back to console
+function appendLog(txt){
+  try{
+    const el = document.getElementById('connectionStatus');
+    if(el) el.textContent = txt;
+    else console.log(txt);
+  }catch(e){ console.log(txt); }
+}
 // score elements are created dynamically in #scoresHolder
 const scoresHolder = document.getElementById('scoresHolder');
 const restartBtn = document.getElementById('restart');
@@ -430,9 +438,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
   ws.onopen = ()=>{
-    msg.textContent=`Connected, Room ID: ${ROOM_ID}`;
-    const statusEl = document.getElementById('connectionStatus');
-    if(statusEl) statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`;
+    appendLog(`Connected, Room ID: ${ROOM_ID}`);
     if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
   };
   ws.onmessage = (ev)=>{
@@ -465,8 +471,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose = ()=>{ msg.textContent='Disconnected'; };
-}).catch(e=>{ msg.textContent='No backend /api/token'; });
+  ws.onclose = ()=>{ appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); };
+}).catch(e=>{ appendLog('No backend /api/token'); });
 
 // keyboard fallback for local testing — mapped to the first two active roles
 window.addEventListener('keydown', (ev)=>{
@@ -513,7 +519,7 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 
-restartBtn.addEventListener('click', ()=>{ resetRound(); msg.textContent='Round reset';
+restartBtn.addEventListener('click', ()=>{ resetRound(); appendLog('Round reset');
   for(const role of Object.keys(players)){
     const el = document.getElementById(`${role}Score`);
     if(el) el.textContent = players[role].score || 0;

@@ -13,7 +13,7 @@
 </head>
 <body>
     <h1>Gyro Paddle</h1>
-    <div id="status">Connecting...</div>
+    
     <div id="scoreboard" style="display:flex; gap:16px; align-items:center; margin-bottom:6px;">
         <div style="color:#4ea1ff">Blue: <span id="scoreBlue">0</span></div>
         <div style="color:#ff6b6b">Red: <span id="scoreRed">0</span></div>
@@ -23,7 +23,6 @@
     <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    const status = document.getElementById('status');
     const logs = document.getElementById('logs');
 
     // Room id extraction from URL
@@ -107,11 +106,19 @@
     }
 
     function appendLog(msg) {
-        if (!logs) return;
-        const t = new Date().toLocaleTimeString();
-        logs.textContent = `${t} ${msg}\n` + logs.textContent;
-        const lines = logs.textContent.split('\n');
-        if (lines.length > 80) logs.textContent = lines.slice(0,80).join('\n');
+        try{
+            // Prefer writing to visible #status if present (for debugging), otherwise write to hidden logs or console
+            const statusEl = document.getElementById('status');
+            if(statusEl) { statusEl.textContent = msg; return; }
+        }catch(e){}
+        if (logs){
+            const t = new Date().toLocaleTimeString();
+            logs.textContent = `${t} ${msg}\n` + logs.textContent;
+            const lines = logs.textContent.split('\n');
+            if (lines.length > 80) logs.textContent = lines.slice(0,80).join('\n');
+            return;
+        }
+        console.log(msg);
     }
 
     function gameLoop() {
@@ -179,10 +186,10 @@
         }
         // Add room id to wsUrl
         wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
-        status.textContent = 'Ready connecting...';
+    appendLog('Ready connecting...');
         connect();
     }).catch(e=>{
-        status.textContent = 'No ws info (is server running?)';
+    appendLog('No ws info (is server running?)');
         appendLog('Cannot fetch /api/token');
     });
 
@@ -190,7 +197,7 @@
         if (!wsUrl) return;
         try {
             ws = new WebSocket(wsUrl);
-            ws.onopen = () => { status.textContent = `Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
+            ws.onopen = () => { appendLog(`Connected, Room ID: ${ROOM_ID}`); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
             ws.onmessage = (ev) => {
                 try {
                     const d = JSON.parse(ev.data);
@@ -206,10 +213,10 @@
                     if (d.beta !== undefined) updatePaddle(d.beta, d.role);
                 } catch(e) { /* ignore parse errors */ }
             };
-            ws.onclose = () => { status.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(connect,3000); };
-            ws.onerror = () => { status.textContent = 'WS error'; if(window.__setRoomBadge) window.__setRoomBadge('WebSocket error'); };
+            ws.onclose = () => { appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(connect,3000); };
+            ws.onerror = () => { appendLog('WS error'); if(window.__setRoomBadge) window.__setRoomBadge('WebSocket error'); };
         } catch(e) {
-            status.textContent = 'WS failed';
+            appendLog('WS failed');
         }
     }
 

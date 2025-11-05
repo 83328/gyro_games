@@ -27,7 +27,7 @@
 </head>
 <body>
   <h1>Asteroid Sweepers</h1>
-  <div id="info">Connecting...</div>
+  
   <div id="scores">
     Players:
     <select id="playerCount" style="margin:0 8px">
@@ -47,7 +47,15 @@
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const info = document.getElementById('info');
+
+// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
 const playerCountSel = document.getElementById('playerCount');
 const scoreDisplay = document.getElementById('scoreDisplay');
 
@@ -109,11 +117,11 @@ function initPlayers() {
 playerCountSel.addEventListener('change', initPlayers);
 
 // Restart button logic
-document.getElementById('restart').addEventListener('click', () => {
+  document.getElementById('restart').addEventListener('click', () => {
   gameActive = true;
   initPlayers();
   winOverlay.style.display = 'none';
-  info.textContent = '';
+  appendLog('');
 });
 
 function initAsteroids() {
@@ -256,7 +264,7 @@ function update(dt) {
       winOverlay.textContent = `Tie: ${winners.map(r=>colorNames[activeRoles.indexOf(r)]).join(', ')}!`;
     }
     winOverlay.style.display = 'flex';
-    info.textContent = winOverlay.textContent;
+    appendLog(winOverlay.textContent);
     setTimeout(()=>{ winOverlay.style.display = 'none'; }, 3000);
   }
 }
@@ -346,7 +354,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{ info.textContent=`Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
+  ws.onopen=()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
   ws.onmessage=ev=>{
     try{
       const d=JSON.parse(ev.data);
@@ -370,8 +378,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose=()=>{info.textContent='Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
-}).catch(e=>{info.textContent='No backend /api/token';});
+  ws.onclose=()=>{appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000);};
+}).catch(e=>{appendLog('No backend /api/token');});
 
 // init
 initPlayers();
