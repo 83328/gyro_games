@@ -50,6 +50,7 @@
     <button id="fs" style="margin-left:6px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
   <canvas id="c" width="600" height="600"></canvas>
+  <div id="roomBadge" style="position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700">Room: ---</div>
 
 <script>
 const canvas = document.getElementById('c');
@@ -387,6 +388,8 @@ function getRoomId() {
   return code;
 }
 const ROOM_ID = getRoomId();
+// show room badge immediately
+const roomBadge = document.getElementById('roomBadge'); if(roomBadge) roomBadge.textContent = `Room ID: ${ROOM_ID}`;
 
 // WebSocket hookup
 fetch('/api/token').then(r=>r.json()).then(data=>{
@@ -394,7 +397,10 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto = (location.protocol==='https:')?'wss':'ws';
   const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=> info.textContent = `Connected, Room ID: ${ROOM_ID}`;
+  ws.onopen = ()=> {
+    info.textContent = `Connected, Room ID: ${ROOM_ID}`;
+    const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = `Connected — Room ID: ${ROOM_ID}`;
+  };
   ws.onmessage = ev => {
     try {
       const d = JSON.parse(ev.data);
@@ -423,8 +429,9 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     } catch(e){}
   };
-  ws.onclose = ()=>{ info.textContent='Disconnected'; setTimeout(()=>location.reload(),2000); };
+  ws.onclose = ()=>{ info.textContent='Disconnected'; const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
 }).catch(e=>{ info.textContent='No backend /api/token'; });
+
 </script>
 </body>
 </html>

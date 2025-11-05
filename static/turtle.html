@@ -53,6 +53,12 @@
     <button id="fs" style="margin-left:12px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
   <canvas id="c" width="700" height="400"></canvas>
+  <div id="msg" style="position:fixed;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+    <div id="msgInner" style="background:rgba(0,0,0,0.6);padding:18px 28px;border-radius:10px;color:#fff;font-size:40px;text-align:center;min-width:220px;">
+      <div id="msgMain">3</div>
+      <div id="msgSub" style="font-size:14px;opacity:0.9;margin-top:8px">Connecting...</div>
+    </div>
+  </div>
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -120,15 +126,23 @@ playerCountSel.addEventListener('change',()=>{initPlayers();});
 function startCountdown(){
   countdown = 3;
   raceRunning = false;
-  info.textContent = `Race starts in ${countdown}...`;
+  // show centered countdown overlay
+  const msg = document.getElementById('msg');
+  const msgMain = document.getElementById('msgMain');
+  const msgSub = document.getElementById('msgSub');
+  msg.style.display = 'flex';
+  msgMain.textContent = countdown;
+  msgSub.textContent = info.textContent || `Room ${ROOM_ID}`;
   clearInterval(countdownTimer);
   countdownTimer = setInterval(()=>{
     countdown--;
     if(countdown>0){
-      info.textContent = `Race starts in ${countdown}...`;
+      msgMain.textContent = countdown;
     } else {
       clearInterval(countdownTimer);
-      info.textContent = "Go!";
+      msgMain.textContent = 'Go!';
+      // hide after short delay so players see "Go!"
+      setTimeout(()=>{ document.getElementById('msg').style.display = 'none'; }, 800);
       raceRunning = true;
     }
   },1000);
@@ -234,7 +248,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ info.textContent = `Connected, Room ID: ${ROOM_ID}`; startCountdown(); };
+  ws.onopen = ()=>{ info.textContent = `Connected, Room ID: ${ROOM_ID}`; const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; startCountdown(); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data); if(!d) return;
@@ -257,7 +271,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       else if(d.orientBeta!==undefined && d.orientGamma!==undefined){ handleInput(d.role, d.orientBeta, d.orientGamma); }
     }catch(e){}
   };
-  ws.onclose = ()=>{ info.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
+  ws.onclose = ()=>{ info.textContent = 'Disconnected'; const ms = document.getElementById('msgSub'); if(ms) ms.textContent = 'Disconnected'; setTimeout(()=>location.reload(),2000); };
 }).catch(e=>{ info.textContent = 'No backend /api/token'; });
 
 let last=performance.now();
