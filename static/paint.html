@@ -252,7 +252,8 @@ function tallyScores() {
     }
   }
   scores = count;
-  // Always show all active player scores
+  // Show scores as percentage of total cells, styled in player color
+  const total = Math.max(1, FIELD_COLS * FIELD_ROWS);
   for (const role of activeRoles) {
     const scoreSpan = {
       blue: sBlue,
@@ -264,10 +265,15 @@ function tallyScores() {
       cyan: sCyan,
       magenta: sMagenta
     }[role];
-    if (scoreSpan) scoreSpan.textContent = scores[role];
-    // Show score container for all active roles and set color
+    const pct = Math.round(((scores[role] || 0) / total) * 100);
+    if (scoreSpan) {
+      scoreSpan.textContent = `${pct}%`;
+      scoreSpan.style.color = colors[role] || '';
+      scoreSpan.style.fontWeight = '700';
+    }
+    // Show score container for all active roles and set color on container as well
     const containerId = role + 'ScoreContainer';
-    const container = document.getElementById(containerId.charAt(0).toUpperCase() + containerId.slice(1));
+    const container = document.getElementById(containerId);
     if (container) {
       container.style.display = '';
       container.style.color = colors[role];
@@ -278,7 +284,7 @@ function tallyScores() {
   for (const role of allRoles) {
     if (!activeRoles.includes(role)) {
       const containerId = role + 'ScoreContainer';
-      const container = document.getElementById(containerId.charAt(0).toUpperCase() + containerId.slice(1));
+      const container = document.getElementById(containerId);
       if (container) container.style.display = 'none';
     }
   }
@@ -319,6 +325,23 @@ winOverlay.style.pointerEvents = 'none';
 winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
 document.body.appendChild(winOverlay);
 
+// prominent countdown badge (top-center)
+const countdownBadge = document.createElement('div');
+countdownBadge.id = 'countdownBadge';
+countdownBadge.style.position = 'fixed';
+countdownBadge.style.left = '50%';
+countdownBadge.style.top = '12px';
+countdownBadge.style.transform = 'translateX(-50%)';
+countdownBadge.style.background = 'rgba(0,0,0,0.8)';
+countdownBadge.style.color = '#fff';
+countdownBadge.style.padding = '10px 16px';
+countdownBadge.style.borderRadius = '12px';
+countdownBadge.style.fontSize = '20px';
+countdownBadge.style.fontWeight = '800';
+countdownBadge.style.zIndex = 10000;
+countdownBadge.style.display = 'none';
+document.body.appendChild(countdownBadge);
+
 function showWinOverlay(role) {
   winOverlay.style.background = colors[role] || '#fff';
   winOverlay.textContent = `${role.charAt(0).toUpperCase()+role.slice(1)} wins!`;
@@ -330,9 +353,16 @@ function startRoundTimer() {
   timeLeft = roundTime;
   roundActive = true;
   if(timerInterval) clearInterval(timerInterval);
+  // show prominent countdown badge
+  if(countdownBadge) {
+    countdownBadge.style.display = '';
+    countdownBadge.textContent = `${timeLeft}s`;
+  }
   timerInterval = setInterval(()=>{
     timeLeft--;
+    // update both small log and prominent badge
     appendLog(`Time left: ${timeLeft}s`);
+    if(countdownBadge) countdownBadge.textContent = `${timeLeft}s`;
     if(timeLeft <= 0) {
       clearInterval(timerInterval);
       endRound();
@@ -360,6 +390,8 @@ function endRound() {
     appendLog(`Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}`);
     setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
   }
+  // hide the prominent countdown badge when round ends
+  if (countdownBadge) countdownBadge.style.display = 'none';
 }
 
 // Restart button logic
