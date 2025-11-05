@@ -323,16 +323,51 @@ function resetRound(){
     }
     return best;
   }
-  // place players at nearest open cell to their intended start
+  // Helper to find nearest open cell to a target that is reachable from a goal cell
+  function reachableNearestOpenCell(tx, ty, gx, gy){
+    // ensure goal is an open cell (or find nearest open cell to goal)
+    let goal = {x: gx, y: gy};
+    if(!(gx>=0 && gx<COLS && gy>=0 && gy<ROWS) || maze[gy][gx]===1){
+      goal = nearestOpenCell(gx, gy);
+    }
+    // BFS from goal to mark reachable open cells
+    const visited = Array(ROWS).fill(0).map(()=>Array(COLS).fill(false));
+    const q = [goal];
+    visited[goal.y][goal.x] = true;
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    while(q.length){
+      const cur = q.shift();
+      for(const [dx,dy] of dirs){
+        const nx = cur.x + dx, ny = cur.y + dy;
+        if(nx>=0 && nx<COLS && ny>=0 && ny<ROWS && !visited[ny][nx] && maze[ny][nx]===0){
+          visited[ny][nx]=true; q.push({x:nx,y:ny});
+        }
+      }
+    }
+    // find nearest visited open cell to target
+    let minDist = Infinity, best = null;
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        if(visited[y][x]){
+          const d = Math.abs(x-tx) + Math.abs(y-ty);
+          if(d < minDist){ minDist = d; best = {x,y}; }
+        }
+      }
+    }
+    // fallback to plain nearest open cell
+    if(!best) return nearestOpenCell(tx,ty);
+    return best;
+  }
+  // place players at nearest open cell to their intended start that is reachable from their goal
   let pos;
-  pos = nearestOpenCell(0, ROWS-1); players.blue = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
-  pos = nearestOpenCell(COLS-1, 0); players.red = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
-  if(activeRoles.includes('yellow')){ pos = nearestOpenCell(COLS-1, ROWS-1); players.yellow = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('green')){ pos = nearestOpenCell(0, 0); players.green = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('orange')){ pos = nearestOpenCell(Math.floor(COLS/2), ROWS-1); players.orange = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('purple')){ pos = nearestOpenCell(Math.floor(COLS/2), 0); players.purple = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('cyan')){ pos = nearestOpenCell(COLS-1, Math.floor(ROWS/2)); players.cyan = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
-  if(activeRoles.includes('magenta')){ pos = nearestOpenCell(0, Math.floor(ROWS/2)); players.magenta = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  pos = reachableNearestOpenCell(0, ROWS-1, COLS-1, 0); players.blue = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
+  pos = reachableNearestOpenCell(COLS-1, 0, 0, ROWS-1); players.red = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0};
+  if(activeRoles.includes('yellow')){ pos = reachableNearestOpenCell(COLS-1, ROWS-1, 0, 0); players.yellow = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('green')){ pos = reachableNearestOpenCell(0, 0, COLS-1, ROWS-1); players.green = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('orange')){ pos = reachableNearestOpenCell(Math.floor(COLS/2), ROWS-1, Math.floor(COLS/2), 0); players.orange = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('purple')){ pos = reachableNearestOpenCell(Math.floor(COLS/2), 0, Math.floor(COLS/2), ROWS-1); players.purple = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('cyan')){ pos = reachableNearestOpenCell(COLS-1, Math.floor(ROWS/2), 0, Math.floor(ROWS/2)); players.cyan = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
+  if(activeRoles.includes('magenta')){ pos = reachableNearestOpenCell(0, Math.floor(ROWS/2), COLS-1, Math.floor(ROWS/2)); players.magenta = {x:pos.x, y:pos.y, px: (pos.x+0.5)*cell.w, py: (pos.y+0.5)*cell.h, vx:0, vy:0}; }
   draw();
 }
 
