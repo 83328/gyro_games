@@ -24,13 +24,12 @@
     <div class="role">Magenta <span id="sMagentaSize">0</span>%</div>
     <button id="calib" style="margin-left:8px">Calibrate</button>
     <button id="restart" style="margin-left:6px">Restart</button>
-    <div id="status" style="margin-left:8px">Connecting...</div>
+    
   </div>
   <canvas id="c" width="900" height="600"></canvas>
 <script>
 const CANVAS = document.getElementById('c');
 const ctx = CANVAS.getContext('2d');
-const statusEl = document.getElementById('status');
 const restartBtn = document.getElementById('restart');
 
 // Game constants
@@ -131,7 +130,7 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto = (location.protocol==='https:')?'wss':'ws';
   const wsUrl = data.ws_url ? (data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID) : `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
+  ws.onopen = ()=>{ const msg = `Connected — Room: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(msg); else console.log(msg); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
@@ -164,8 +163,8 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
     }catch(e){}
   };
-  ws.onclose = ()=>{ statusEl.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); };
-}).catch(e=>{ statusEl.textContent = 'No backend'; });
+  ws.onclose = ()=>{ const msg = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge(msg); else console.log(msg); };
+}).catch(e=>{ const msg = 'No backend'; if(window.__setRoomBadge) window.__setRoomBadge(msg); else console.log(msg); });
 
 // keyboard fallback for testing
 window.addEventListener('keydown', (ev)=>{
@@ -416,11 +415,11 @@ calibBtn.addEventListener('click', ()=>{
     }
   }
   saveCalibrations();
-  statusEl.textContent = 'Calibrated';
-  setTimeout(()=>{ statusEl.textContent = 'Connected' }, 1200);
+  const msg1 = 'Calibrated'; if(window.__setRoomBadge) window.__setRoomBadge(msg1); else console.log(msg1);
+  setTimeout(()=>{ const msg2 = 'Connected'; if(window.__setRoomBadge) window.__setRoomBadge(msg2); else console.log(msg2); }, 1200);
 });
 
-restartBtn.addEventListener('click', ()=>{ resetGame(); statusEl.textContent='Restarted'; });
+restartBtn.addEventListener('click', ()=>{ resetGame(); const msg = 'Restarted'; if(window.__setRoomBadge) window.__setRoomBadge(msg); else console.log(msg); });
 
 function updateHudSizes(){
   try{
