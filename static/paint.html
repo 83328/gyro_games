@@ -20,6 +20,7 @@
     border-radius: 8px;
     box-shadow: 0 0 20px rgba(0,0,0,0.4);
   }
+  h1 { margin-top: 36px; }
   #info { margin: 8px; font-size: 1.2em; }
   #scores { margin: 8px; }
 </style>
@@ -191,6 +192,8 @@ function update(dt) {
 }
 
 function draw() {
+  // clear entire canvas each frame so restart/overlay doesn't leave artifacts
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   // draw field
   for (let r=0; r<FIELD_ROWS; r++) {
     for (let c=0; c<FIELD_COLS; c++) {
@@ -206,7 +209,7 @@ function draw() {
         // Gradual fill: fill from entry side
         let x = c*PIX_SIZE, y = r*PIX_SIZE;
         let w = PIX_SIZE, h = PIX_SIZE;
-        if(progress < 1) {
+  if(progress < 1) {
           if(entryDir.dx === 1) { // entered from left
             ctx.fillRect(x, y, w*progress, h);
           } else if(entryDir.dx === -1) { // entered from right
@@ -219,6 +222,7 @@ function draw() {
             ctx.fillRect(x, y, w*progress, h); // default left to right
           }
         } else {
+          // draw a filled rect without stroke to avoid white outlines
           ctx.fillRect(x, y, w, h);
         }
       }
@@ -228,11 +232,13 @@ function draw() {
   for (const role of activeRoles) {
     const p = players[role];
     ctx.save();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
+    // draw player as filled square and a subtle outer stroke only on the player, clipped to the player's rect
     ctx.fillStyle = colors[role];
     ctx.fillRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
-    ctx.strokeRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
+    // subtle outline for player only
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.strokeRect(p.x-PIX_SIZE/2+1, p.y-PIX_SIZE/2+1, PIX_SIZE-2, PIX_SIZE-2);
     ctx.restore();
   }
 }
