@@ -5,7 +5,7 @@ Lightweight local demo that uses phones as motion controllers and a small Python
 
 ## Features
 
-- **Red Gyro streamer button** (`/gyro.html`) — streams DeviceMotion / DeviceOrientation and acceleration to the server via WebSocket.
+- **Gyro streaming page** (`/gyro.html`) — This page acts as the controller and streams DeviceMotion / DeviceOrientation and acceleration to the server via a WebSocket.
 
 All the games:
 
@@ -13,7 +13,7 @@ All the games:
 	A multi-player grid maze race. Players tilt their phones to slide through corridors. Includes calibration and orientation-first controls for intuitive steering.
 
 - **Moon Lander**
-	Two players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Fuel and gentle auto-level assist help make it forgiving.
+	2-8 players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Watch your fuel level, since it can run out quickly!
 
 - **Pong**
 	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
@@ -27,30 +27,41 @@ All the games:
 - **Sumo Arena**
 	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
 
+- **Paint**
+	Players control paintbrushes to cover the canvas with their color. The goal is to cover as much area as possible while competing against other players.
+
+- **Asteroid Sweepers**
+	Players control spaceships to collect floating asteroids. The goal is to gather as many asteroids as possible within a time limit.
+
 - **Blackhole Blaster**
-	Players control spaceships to avoid and shoot blackholes that appear randomly. The goal is to survive as long as possible while dodging the other ships.
+	Players control spaceships and try to hit each other. The goal is to survive as long as possible while dodging the other ships.
+
+Except for Pong which is for 2 players only, all games support up to 8 players.
 
 ![Thumbnails](media/images/thumb_overview.png)
 
 
 ## Quick start (Linux / macOS)
 
-1. Create & activate a virtual environment (recommended):
+1. Create & activate a virtual environment (recommended) and install minimal dependencies:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install aiohttp
+pip install cloudflared
 ```
-
-2. Install minimal dependencies:
+2. Start the server:
 
 ```bash
-python3 -m pip install --upgrade pip
-python3 -m pip install aiohttp python-dotenv
+python3 ./server.py --host 0.0.0.0 --port 8080 --static ./static
 ```
+Now the site should be accessible at localhost:8080.
 
 3. (Optional) Create a .env file with a token to require clients to present the same token when connecting:
 
+I set up a tunnel with cloudflared to expose my local server to the internet so phones can connect without being on the same WiFi. You can also use ngrok or similar services.
 ```
 GYRO_TOKEN=some-secret-token
 # Optionally set a public ws_url if you're using a tunnel service
@@ -60,7 +71,7 @@ GYRO_TOKEN=some-secret-token
 4. Run the server:
 
 ```bash
-python3 server.py
+./run.sh
 ```
 
 5. Open the pages in your browser (or expose the server with ngrok and open the forwarded URL on phones):
