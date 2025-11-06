@@ -49,6 +49,16 @@
   <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;color:#fff;text-align:center" value="" autocomplete="off" />
       <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
     </div>
+
+    <!-- iOS permission overlay (hidden by default) -->
+    <div id="permOverlay" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:50"> 
+      <div style="background:#111;padding:18px;border-radius:12px;border:1px solid #333;text-align:center;color:#fff;max-width:320px;margin:0 20px">
+        <div style="font-weight:700;margin-bottom:8px">Enable motion</div>
+        <div style="margin-bottom:12px;font-size:0.95em;opacity:0.9">Your browser requires permission to access motion sensors. Tap to enable and start streaming.</div>
+        <button id="permBtn" style="padding:10px 14px;border-radius:8px;background:#1f6feb;color:#fff;border:none;font-weight:700">Enable motion & start</button>
+        <div style="margin-top:10px;font-size:0.85em;opacity:0.8">You can change this later in Settings → Motion & Orientation</div>
+      </div>
+    </div>
     <button id="roleBlue" data-role="blue">Blue</button>
     <button id="roleRed" data-role="red">Red</button>
     <button id="roleYellow" data-role="yellow">Yellow</button>
@@ -469,7 +479,27 @@ updateRoleButtons();
 Promise.resolve().then(() => {
   // Wait a tick so the token fetch above has a chance to populate AUTH_TOKEN
   setTimeout(() => {
-    startStreaming();
+    // On iOS 13+ Safari the DeviceMotionEvent.requestPermission API requires a user gesture.
+    // If the API exists, show a small overlay asking the user to tap to enable motion.
+    const permBtn = document.getElementById('permBtn');
+    const permOverlay = document.getElementById('permOverlay');
+    const needsGesture = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function');
+    if (needsGesture && permBtn && permOverlay) {
+      permOverlay.style.display = 'flex';
+      permBtn.addEventListener('click', async () => {
+        try {
+          // Request motion permission (some browsers require orientation permission as well)
+          await DeviceMotionEvent.requestPermission();
+        } catch (e) {
+          // ignore, we'll try DeviceOrientationEvent as well
+        }
+        try { await DeviceOrientationEvent.requestPermission(); } catch (e) { /* non-fatal */ }
+        permOverlay.style.display = 'none';
+        startStreaming();
+      }, { once: true });
+    } else {
+      startStreaming();
+    }
   }, 50);
 });
 </script>
