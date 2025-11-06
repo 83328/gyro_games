@@ -160,12 +160,26 @@ function setUiDisconnected() {
   // remove any colored background so disconnection is visually obvious
   document.body.style.background = '#111';
   document.body.style.color = '#fff';
+  // allow quickly changing the room when disconnected
+  try {
+    if (setRoomBtn) {
+      setRoomBtn.disabled = false;
+      setRoomBtn.setAttribute('aria-disabled', 'false');
+      setRoomBtn.style.opacity = '';
+      setRoomBtn.style.filter = '';
+      setRoomBtn.textContent = 'Reconnect';
+    }
+    if (roomIdInput) roomIdInput.focus();
+  } catch (e) { /* best-effort */ }
 }
 
 function setUiConnected() {
   // restore per-role enabled/disabled according to claims and show selected color
   updateRoleButtons();
   try { applyRoleColor(role); } catch (e) { /* best-effort */ }
+  // re-run room input validation so Set returns to its normal enabled/disabled state
+  try { if (roomIdInput) roomIdInput.dispatchEvent(new Event('input')); } catch (e) {}
+  try { if (setRoomBtn) setRoomBtn.textContent = 'Set'; } catch (e) {}
 }
 
 // Wrap the role button clicks so we claim the new role and release the old one
