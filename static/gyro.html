@@ -38,18 +38,15 @@
   </style>
 </head>
 <body>
-  <h2 style="margin:0;">Pick your colour and press start</h2>
+  <h2 style="margin:0;">Select a colour to start</h2>
   <div class="controls">
-    <div><span id="status">Idle</span></div>
-    <div style="display:flex;gap:8px;justify-content:center">
-  <button id="toggleStreamBtn" style="background:#e53935;color:#fff;font-weight:600;font-size:1.15em;box-shadow:0 2px 8px #e5393577;">Start</button>
-    </div>
+    <div><span id="status">Starting…</span></div>
   </div>
   <div style="height:100px;">&nbsp;</div>
   <div class="roles">
     <div style="position:fixed;bottom:0;left:0;width:100%;background:#111;padding:12px 0 8px 0;display:flex;align-items:center;justify-content:center;gap:8px;z-index:10;box-shadow:0 -2px 12px #0008;">
       <label for="roomIdInput" id="roomIdLabel" style="font-weight:600;color:#fff;">Room ID:</label>
-      <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;text-align:center" value="" autocomplete="off" />
+  <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;color:#fff;text-align:center" value="" autocomplete="off" />
       <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
     </div>
     <button id="roleBlue" data-role="blue">Blue</button>
@@ -64,7 +61,7 @@
 
 <script>
 let AUTH_TOKEN = null;
-const toggleStreamBtn = document.getElementById('toggleStreamBtn');
+// No start/stop button: streaming will start automatically
 const statusEl = document.getElementById('status');
 
 let socket = null;
@@ -73,7 +70,109 @@ let sendCount = 0;
 let role = 'blue'; // default to blue so game will react
 let latestOrientation = {alpha: null, beta: null, gamma: null};
 
+// Track claimed roles in this room (other clients have reserved them)
+let claimedRoles = new Set();
+// Wake lock sentinel
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    log('Wake Lock API not supported');
+    return false;
+  }
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    log('Wake lock acquired');
+    // if the lock is released by the UA (e.g. screen off), null it
+    wakeLock.addEventListener('release', () => {
+      log('Wake lock released by UA');
+      wakeLock = null;
+    });
+    return true;
+  } catch (err) {
+    log('Wake lock request failed: ' + err);
+    wakeLock = null;
+    return false;
+  }
+}
+
+async function releaseWakeLock() {
+  try {
+    if (wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+      log('Wake lock released');
+    }
+  } catch (err) {
+    log('Failed to release wake lock: ' + err);
+  }
+}
+
 function log(s){ console.debug('[gyro]', s); }
+
+// Send a small non-gaming claim/release message over the room to inform other clients
+function sendClaim(r, action = 'claim') {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  const msg = JSON.stringify({ type: 'role-claim', role: r, action: action, t: Date.now() });
+  try { socket.send(msg); } catch (e) { /* best-effort */ }
+}
+
+// Update button UI to reflect which roles are claimed by others
+function updateRoleButtons() {
+  const roles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  roles.forEach(roleName => {
+    const btn = document.querySelector(`button[data-role="${roleName}"]`);
+    if (!btn) return;
+    if (claimedRoles.has(roleName) && roleName !== role) {
+      btn.disabled = true;
+      btn.style.opacity = '0.35';
+      btn.style.filter = 'grayscale(80%)';
+      btn.title = 'Taken in this room';
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      btn.style.filter = '';
+      btn.title = '';
+    }
+  });
+}
+
+// UI state helpers
+function setUiDisconnected() {
+  const roles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  roles.forEach(roleName => {
+    const btn = document.querySelector(`button[data-role="${roleName}"]`);
+    if (!btn) return;
+    btn.disabled = true;
+    btn.style.opacity = '0.35';
+    btn.style.filter = 'grayscale(80%)';
+  });
+  // remove any colored background so disconnection is visually obvious
+  document.body.style.background = '#111';
+  document.body.style.color = '#fff';
+}
+
+function setUiConnected() {
+  // restore per-role enabled/disabled according to claims and show selected color
+  updateRoleButtons();
+  try { applyRoleColor(role); } catch (e) { /* best-effort */ }
+}
+
+// Wrap the role button clicks so we claim the new role and release the old one
+function claimableRoleClick(targetRole) {
+  if (claimedRoles.has(targetRole) && targetRole !== role) {
+    // already taken by someone else
+    return;
+  }
+  const prev = role;
+  if (prev === targetRole) return; // no change
+  // release previous
+  if (socket && socket.readyState === WebSocket.OPEN) sendClaim(prev, 'release');
+  role = targetRole;
+  // claim new
+  if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'claim');
+  applyRoleColor(role);
+}
 
 // Room id extraction from URL
 function getRoomId() {
@@ -92,17 +191,57 @@ let ROOM_ID = getRoomId();
 const roomIdInput = document.getElementById('roomIdInput');
 const setRoomBtn = document.getElementById('setRoomBtn');
 if (roomIdInput) roomIdInput.value = ROOM_ID;
+// disable Set until the user types a valid, different room
 if (setRoomBtn) {
+  setRoomBtn.disabled = true;
+  setRoomBtn.setAttribute('aria-disabled', 'true');
+  setRoomBtn.style.opacity = '0.35';
+  setRoomBtn.style.filter = 'grayscale(80%)';
+
+  // enable only when input is a valid 3-letter code and differs from current ROOM_ID
+  const validateInput = () => {
+    const val = (roomIdInput.value || '').toUpperCase().replace(/[^A-Z]/g, '');
+    const enable = val.length === 3 && val !== ROOM_ID;
+    setRoomBtn.disabled = !enable;
+    setRoomBtn.setAttribute('aria-disabled', (!enable).toString());
+    if (!enable) {
+      setRoomBtn.style.opacity = '0.35';
+      setRoomBtn.style.filter = 'grayscale(80%)';
+    } else {
+      setRoomBtn.style.opacity = '';
+      setRoomBtn.style.filter = '';
+    }
+  };
+  roomIdInput.addEventListener('input', validateInput);
+
   setRoomBtn.addEventListener('click', () => {
     let val = (roomIdInput.value || '').toUpperCase().replace(/[^A-Z]/g, '');
     if (val.length === 3) {
+      // If we're currently streaming, stop first (releases claim etc.) so we can reconnect cleanly
+      try { if (listening) stopStreaming(); } catch (e) {}
+
+      // clear any known claims from previous room
+      claimedRoles.clear();
+
       ROOM_ID = val;
       roomIdInput.value = ROOM_ID;
-      statusEl.textContent = `Room set to ${ROOM_ID}`;
+      statusEl.textContent = `Room set to ${ROOM_ID} — connecting...`;
+
+      // restart streaming / websocket for the new room
+      try { startStreaming(); } catch (e) { log('startStreaming failed: ' + e); }
+  // keep button disabled until further changes
+  setRoomBtn.disabled = true;
+  setRoomBtn.setAttribute('aria-disabled', 'true');
+  setRoomBtn.style.opacity = '0.35';
+  setRoomBtn.style.filter = 'grayscale(80%)';
     } else {
       statusEl.textContent = 'Room ID must be 3 letters';
     }
   });
+}
+// validate initial state in case user edited the URL before page load
+if (roomIdInput) {
+  setTimeout(() => roomIdInput.dispatchEvent(new Event('input')), 0);
 }
 
 function buildWsUrl() {
@@ -128,16 +267,38 @@ function openSocket() {
   socket.onopen = () => {
     statusEl.textContent = `Connected, Room ID: ${ROOM_ID}`;
     log('WebSocket open');
-    toggleStreamBtn.textContent = 'Stop';
+    // update visible status for auto-start
+    statusEl.textContent = `Streaming — Room ${ROOM_ID}`;
+    // Announce our current role selection so others know it's taken
+    sendClaim(role, 'claim');
+    // Ask existing clients to announce their claims so we sync
+    try { socket.send(JSON.stringify({ type: 'request-claims', t: Date.now() })); } catch (e) {}
+    setUiConnected();
   };
   socket.onclose = () => {
     statusEl.textContent = `WebSocket closed, Room ID: ${ROOM_ID}`;
     log('WebSocket closed');
-    toggleStreamBtn.textContent = 'Start';
+    setUiDisconnected();
   };
   socket.onerror = (e) => {
     log('Socket error');
     // suppressed console.warn to reduce noise
+  };
+  socket.onmessage = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (!data || !data.type) return;
+      if (data.type === 'role-claim' && data.role) {
+        if (data.action === 'claim') claimedRoles.add(data.role);
+        else if (data.action === 'release') claimedRoles.delete(data.role);
+        updateRoleButtons();
+      } else if (data.type === 'request-claims') {
+        // another client wants current claims; reply with our claim
+        if (role) sendClaim(role, 'claim');
+      }
+    } catch (err) {
+      // ignore non-json or malformed messages
+    }
   };
 }
 
@@ -218,14 +379,12 @@ function applyRoleColor(r) {
   if (roomIdInput) roomIdInput.style.color = '#fff';
 }
 
-document.getElementById('roleBlue').addEventListener('click', () => { role='blue'; applyRoleColor('blue'); log('Role=blue'); });
-document.getElementById('roleRed').addEventListener('click', () => { role='red'; applyRoleColor('red'); log('Role=red'); });
-document.getElementById('roleYellow').addEventListener('click', () => { role='yellow'; applyRoleColor('yellow'); log('Role=yellow'); });
-document.getElementById('roleGreen').addEventListener('click', () => { role='green'; applyRoleColor('green'); log('Role=green'); });
-document.getElementById('roleOrange').addEventListener('click', () => { role='orange'; applyRoleColor('orange'); log('Role=orange'); });
-document.getElementById('rolePurple').addEventListener('click', () => { role='purple'; applyRoleColor('purple'); log('Role=purple'); });
-document.getElementById('roleCyan').addEventListener('click', () => { role='cyan'; applyRoleColor('cyan'); log('Role=cyan'); });
-document.getElementById('roleMagenta').addEventListener('click', () => { role='magenta'; applyRoleColor('magenta'); log('Role=magenta'); });
+// Bind role buttons to claim-aware click handler
+['blue','red','yellow','green','orange','purple','cyan','magenta'].forEach(rn => {
+  const el = document.getElementById('role' + rn[0].toUpperCase() + rn.slice(1));
+  if (!el) return;
+  el.addEventListener('click', () => claimableRoleClick(rn));
+});
 
 // Always show all 8 color buttons, no player count selector needed
 const rolesContainer = document.querySelector('.roles');
@@ -263,26 +422,55 @@ async function startStreaming() {
   openSocket();
   listening = true;
   window.addEventListener('devicemotion', handleMotion);
+  // try to keep the screen awake while streaming
+  try { requestWakeLock(); } catch (e) { /* best-effort */ }
   // deviceorientation listener was already added above to cache values; ensure it's active
   // nothing else needed here
   statusEl.textContent = 'Streaming...';
+  setUiConnected();
 }
 
 function stopStreaming() {
   listening = false;
   window.removeEventListener('devicemotion', handleMotion);
   if (socket) socket.close();
+  // release wake lock when we stop
+  try { releaseWakeLock(); } catch (e) {}
   statusEl.textContent = 'Stopped';
+  setUiDisconnected();
 }
 
-toggleStreamBtn.addEventListener('click', () => {
-  if (!listening) {
-    startStreaming();
-    toggleStreamBtn.textContent = 'Stop';
-  } else {
-    stopStreaming();
-    toggleStreamBtn.textContent = 'Start';
+// release our claim when we stop streaming (best-effort) and on page unload
+function releaseMyClaim() {
+  try { if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'release'); } catch (e) {}
+}
+window.addEventListener('beforeunload', releaseMyClaim);
+
+// Re-acquire wake lock when the page becomes visible again (UA may release it)
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && listening) {
+    // attempt to re-acquire if needed
+    if (!wakeLock) await requestWakeLock();
   }
+});
+
+// Ensure claim released when stopStreaming is called
+const _oldStopStreaming = stopStreaming;
+stopStreaming = function() {
+  releaseMyClaim();
+  _oldStopStreaming();
+};
+
+// initialize UI buttons state in case some roles are already claimed
+updateRoleButtons();
+
+// Auto-start the streaming flow once the auth token is loaded
+// If token fetch fails we still attempt to open socket without token (server will reject)
+Promise.resolve().then(() => {
+  // Wait a tick so the token fetch above has a chance to populate AUTH_TOKEN
+  setTimeout(() => {
+    startStreaming();
+  }, 50);
 });
 </script>
 </body>
