@@ -86,6 +86,8 @@ const ROLE_INDEX = { blue:0, red:1, yellow:2, green:3, orange:4, purple:5, cyan:
 let claimedRoles = new Set();
 // Wake lock sentinel
 let wakeLock = null;
+// Track a role the user chose locally before we have a websocket open
+let pendingLocalRole = null;
 
 async function requestWakeLock() {
   if (!('wakeLock' in navigator)) {
@@ -193,11 +195,34 @@ function claimableRoleClick(targetRole) {
   }
   const prev = role;
   if (prev === targetRole) return; // no change
-  // release previous
-  if (socket && socket.readyState === WebSocket.OPEN) sendClaim(prev, 'release');
+
+  // If we're connected, perform optimistic claim immediately (as before)
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    try {
+      if (prev) {
+        claimedRoles.delete(prev);
+        if (socket && socket.readyState === WebSocket.OPEN) sendClaim(prev, 'release');
+      }
+    } catch (e) { /* best-effort */ }
+
+    role = targetRole;
+
+    try {
+      claimedRoles.add(role);
+      if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'claim');
+    } catch (e) { /* best-effort */ }
+
+    updateRoleButtons();
+    applyRoleColor(role);
+    // clear any pending local choice (shouldn't be one while connected)
+    pendingLocalRole = null;
+    return;
+  }
+
+  // Not connected: record the user's desired role but do not add to claimedRoles yet
   role = targetRole;
-  // claim new
-  if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'claim');
+  pendingLocalRole = targetRole;
+  // visually show their selection but do not disable other buttons (we don't know room state yet)
   applyRoleColor(role);
 }
 
@@ -249,6 +274,7 @@ if (setRoomBtn) {
 
       // clear any known claims from previous room
       claimedRoles.clear();
+      pendingLocalRole = null;
 
       ROOM_ID = val;
       roomIdInput.value = ROOM_ID;
@@ -296,6 +322,29 @@ function openSocket() {
     log('WebSocket open');
     // update visible status for auto-start
     statusEl.textContent = `Streaming — Room ${ROOM_ID}`;
+    // ask existing clients to announce their claims so we sync
+    try { socket.send(JSON.stringify({ type: 'request-claims', t: Date.now() })); } catch (e) {}
+
+    // Wait briefly for incoming claim announcements, then reconcile any pending local selection
+    setTimeout(() => {
+      if (pendingLocalRole) {
+        if (!claimedRoles.has(pendingLocalRole)) {
+          // safe to claim
+          role = pendingLocalRole;
+          try { claimedRoles.add(role); if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'claim'); } catch (e) {}
+          updateRoleButtons();
+          applyRoleColor(role);
+        } else {
+          // someone else already took it; inform user and clear
+          statusEl.textContent = `${pendingLocalRole} is already taken`; 
+          // clear the visual selection
+          role = null;
+          pendingLocalRole = null;
+          updateRoleButtons();
+        }
+      }
+    }, 150);
+
     setUiConnected();
   };
   socket.onclose = () => {
@@ -315,6 +364,9 @@ function openSocket() {
         if (data.action === 'claim') claimedRoles.add(data.role);
         else if (data.action === 'release') claimedRoles.delete(data.role);
         updateRoleButtons();
+      } else if (data.type === 'request-claims') {
+        // another client wants current claims; reply with our claim
+        if (role) sendClaim(role, 'claim');
       }
     } catch (err) {
       // ignore non-json or malformed messages
@@ -462,7 +514,11 @@ function stopStreaming() {
 
 // release our claim when we stop streaming (best-effort) and on page unload
 function releaseMyClaim() {
-  try { if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'release'); } catch (e) {}
+  try {
+    if (role) claimedRoles.delete(role);
+    updateRoleButtons();
+    if (socket && socket.readyState === WebSocket.OPEN) sendClaim(role, 'release');
+  } catch (e) {}
 }
 window.addEventListener('beforeunload', releaseMyClaim);
 
