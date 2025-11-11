@@ -17,6 +17,10 @@ WS_URL = os.environ.get('WS_URL')
 # Store clients per room: {room_id: set(ws)}
 rooms = {}
 message_count = 0  # Counter for throttled logging
+binary_count = 0
+# throttle settings for noisy binary frames
+BINARY_LOG_EVERY = 50
+BINARY_LARGE_THRESHOLD = 512
 
 async def websocket_handler(request):
 
@@ -45,7 +49,7 @@ async def websocket_handler(request):
                 if msg.type == web.WSMsgType.TEXT:
                     global message_count
                     message_count += 1
-                    if message_count % 50 == 0:
+                    if message_count % 125 == 0:
                         print(f"[RX TEXT #{message_count}] from {peer} room={room_id}: {msg.data[:100]}...")
                     # Relay only to clients in the same room
                     for client in list(rooms.get(room_id, [])):
@@ -58,7 +62,21 @@ async def websocket_handler(request):
                             print(f"[!] Failed to send TEXT to client {client}: {e}")
                 elif msg.type == web.WSMsgType.BINARY:
                     data = msg.data
-                    print(f"[RX BINARY] from {peer} room={room_id}: {len(data)} bytes")
+                    # throttled logging: increment counter and print only occasionally
+                    try:
+                        binary_count += 1
+                    except Exception:
+                        binary_count = 1
+                    should_log = False
+                    if len(data) > BINARY_LARGE_THRESHOLD:
+                        should_log = True
+                    elif (binary_count % BINARY_LOG_EVERY) == 0:
+                        should_log = True
+                    # if this looks like a non-motion frame (unexpected type byte), log once in a while
+                    if len(data) >= 1 and data[0] != 1 and (binary_count % (BINARY_LOG_EVERY * 5) == 0):
+                        should_log = True
+                    if should_log:
+                        print(f"[RX BINARY] from {peer} room={room_id}: {len(data)} bytes (count={binary_count})")
 
                     # Try to decode our compact motion frame format (client-side gyro binary)
                     # Format (client, little-endian):
@@ -136,8 +154,8 @@ async def websocket_handler(request):
                             print(f"[!] Failed to send BINARY to client {client}: {e}")
                 elif msg.type == web.WSMsgType.ERROR:
                     print('WebSocket connection closed with exception %s' % ws.exception())
-                else:
-                    print(f"[RX] msg.type={msg.type} from {peer} room={room_id}")
+#                else:
+#                    print(f"[RX] msg.type={msg.type} from {peer} room={room_id}")
             except Exception as inner:
                 print(f"[!] Error processing message from {peer} room={room_id}: {inner}")
     finally:
