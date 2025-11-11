@@ -77,7 +77,7 @@ const statusEl = document.getElementById('status');
 let socket = null;
 let listening = false;
 let sendCount = 0;
-let role = 'blue'; // default to blue so game will react
+let role = null; // will be auto-assigned when we join a room (first-come order)
 let latestOrientation = {alpha: null, beta: null, gamma: null};
 // role index map for binary packing
 const ROLE_INDEX = { blue:0, red:1, yellow:2, green:3, orange:4, purple:5, cyan:6, magenta:7 };
@@ -124,6 +124,7 @@ function log(s){ console.debug('[gyro]', s); }
 
 // Send a small non-gaming claim/release message over the room to inform other clients
 function sendClaim(r, action = 'claim') {
+  if (!r) return; // nothing to claim/release
   if (!socket || socket.readyState !== WebSocket.OPEN) return;
   const msg = JSON.stringify({ type: 'role-claim', role: r, action: action, t: Date.now() });
   try { socket.send(msg); } catch (e) { /* best-effort */ }
@@ -295,10 +296,6 @@ function openSocket() {
     log('WebSocket open');
     // update visible status for auto-start
     statusEl.textContent = `Streaming — Room ${ROOM_ID}`;
-    // Announce our current role selection so others know it's taken
-    sendClaim(role, 'claim');
-    // Ask existing clients to announce their claims so we sync
-    try { socket.send(JSON.stringify({ type: 'request-claims', t: Date.now() })); } catch (e) {}
     setUiConnected();
   };
   socket.onclose = () => {
@@ -318,9 +315,6 @@ function openSocket() {
         if (data.action === 'claim') claimedRoles.add(data.role);
         else if (data.action === 'release') claimedRoles.delete(data.role);
         updateRoleButtons();
-      } else if (data.type === 'request-claims') {
-        // another client wants current claims; reply with our claim
-        if (role) sendClaim(role, 'claim');
       }
     } catch (err) {
       // ignore non-json or malformed messages
