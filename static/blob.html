@@ -394,9 +394,50 @@ const HUD_IDS = { blue:'sBlueSize', red:'sRedSize', yellow:'sYellowSize', green:
 const hudEls = {};
 for(const r of ROLES) hudEls[r] = document.getElementById(HUD_IDS[r]);
 let hudTimer = 0;
+// Winner splash state and overlay
+let splashActive = false;
+const winOverlay = document.createElement('div');
+winOverlay.style.position = 'fixed';
+winOverlay.style.left = '0';
+winOverlay.style.top = '0';
+winOverlay.style.width = '100%';
+winOverlay.style.height = '100%';
+winOverlay.style.display = 'none';
+winOverlay.style.alignItems = 'center';
+winOverlay.style.justifyContent = 'center';
+winOverlay.style.zIndex = 10001;
+winOverlay.style.color = '#001';
+winOverlay.style.fontFamily = 'Arial, Helvetica, sans-serif';
+winOverlay.style.fontSize = '52px';
+winOverlay.style.fontWeight = '800';
+winOverlay.style.pointerEvents = 'none';
+winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
+document.body.appendChild(winOverlay);
+
+function showWinnerSplash(role){
+  if(splashActive) return;
+  splashActive = true;
+  const color = COLORS[role] || '#000';
+  winOverlay.style.background = color;
+  // pick readable text color based on luminance
+  let hex = (color.replace('#',''));
+  let r=0,g=0,b=0;
+  try{ r = parseInt(hex.substring(0,2),16); g = parseInt(hex.substring(2,4),16); b = parseInt(hex.substring(4,6),16); }catch(e){}
+  const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+  winOverlay.style.color = (lum > 170) ? '#001' : '#fff';
+  winOverlay.textContent = `${role.charAt(0).toUpperCase() + role.slice(1)} wins!`;
+  winOverlay.style.display = 'flex';
+  // After 3s hide and restart
+  setTimeout(()=>{
+    winOverlay.style.display = 'none';
+    splashActive = false;
+    resetGame();
+  }, 3000);
+}
 function frame(now){
   const dt = Math.min(60, now - last)/1000; last = now;
-  step(dt);
+  // If a winner splash is active, pause game updates but keep drawing so overlay shows
+  if(!splashActive) step(dt);
   draw();
   hudTimer += dt;
   if(hudTimer > 0.25){ updateHudSizes(); hudTimer = 0; }
@@ -416,7 +457,7 @@ calibBtn.addEventListener('click', ()=>{
   }
   saveCalibrations();
   const msg1 = 'Calibrated'; if(window.__setRoomBadge) window.__setRoomBadge(msg1); else console.log(msg1);
-  setTimeout(()=>{ const msg2 = 'Connected'; if(window.__setRoomBadge) window.__setRoomBadge(msg2); else console.log(msg2); }, 1200);
+  setTimeout(()=>{ const msg2 = `Connected — Room: ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(msg2); else console.log(msg2); }, 1200);
 });
 
 restartBtn.addEventListener('click', ()=>{ resetGame(); console.log('Restarted'); });
@@ -431,6 +472,8 @@ function updateHudSizes(){
         el.textContent = String(pct);
         // Set color of parent .role div
         if(el.parentElement) el.parentElement.style.color = COLORS[r];
+        // trigger winner splash if threshold exceeded
+        if(pct > 95 && !splashActive){ showWinnerSplash(r); }
       }
     }
   }catch(e){}
