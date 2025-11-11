@@ -79,6 +79,8 @@ let listening = false;
 let sendCount = 0;
 let role = 'blue'; // default to blue so game will react
 let latestOrientation = {alpha: null, beta: null, gamma: null};
+// role index map for binary packing
+const ROLE_INDEX = { blue:0, red:1, yellow:2, green:3, orange:4, purple:5, cyan:6, magenta:7 };
 
 // Track claimed roles in this room (other clients have reserved them)
 let claimedRoles = new Set();
@@ -335,42 +337,42 @@ function handleMotion(e) {
   window._lastGyroSent = now;
   const r = e.rotationRate || {};
   const acc = e.acceleration || e.accelerationIncludingGravity || {};
-  function fmt(v){
-    if (v === null || v === undefined) return null;
-    if (typeof v !== 'number') return v;
-    return Number(v.toFixed(4));
+
+  // Binary packet format (little-endian):
+  // [0] uint8 message type (1=motion)
+  // [1] uint8 role index (0..7)
+  // [2..5] uint32 timestamp (ms modulo 2^32)
+  // [6..] eight float32 values in order: beta,gamma,orientAlpha,orientBeta,orientGamma,ax,ay,az
+  const floats = new Float32Array(8);
+  floats[0] = (typeof r.beta === 'number') ? r.beta : 0;
+  floats[1] = (typeof r.gamma === 'number') ? r.gamma : 0;
+  floats[2] = (typeof latestOrientation.alpha === 'number') ? latestOrientation.alpha : 0;
+  floats[3] = (typeof latestOrientation.beta === 'number') ? latestOrientation.beta : 0;
+  floats[4] = (typeof latestOrientation.gamma === 'number') ? latestOrientation.gamma : 0;
+  floats[5] = (typeof acc.x === 'number') ? acc.x : 0;
+  floats[6] = (typeof acc.y === 'number') ? acc.y : 0;
+  floats[7] = (typeof acc.z === 'number') ? acc.z : 0;
+
+  const headerBytes = 6; // 1 + 1 + 4
+  const buf = new ArrayBuffer(headerBytes + floats.byteLength);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 1); // motion message type
+  dv.setUint8(1, (ROLE_INDEX[role] !== undefined) ? ROLE_INDEX[role] : 255);
+  dv.setUint32(2, now >>> 0, true);
+  // copy float32 bytes (little-endian)
+  const floatBytes = new Uint8Array(buf, headerBytes);
+  const src = new Uint8Array(floats.buffer);
+  // ensure little-endian layout: Float32Array uses platform endianness, but DataView.setFloat32 would be safe.
+  // We'll copy per-float to guarantee LE ordering.
+  for (let i = 0; i < floats.length; ++i) {
+    dv.setFloat32(headerBytes + i * 4, floats[i], true);
   }
-  // Add room id to payload
-  const payload = {
-    t: Date.now(),
-    beta: fmt(r.beta || 0),
-    gamma: fmt(r.gamma || 0),
-    orientAlpha: fmt(latestOrientation.alpha),
-    orientBeta: fmt(latestOrientation.beta),
-    orientGamma: fmt(latestOrientation.gamma),
-    ax: fmt(acc.x || 0),
-    ay: fmt(acc.y || 0),
-    az: fmt(acc.z || 0),
-    role: (
-      role === 'blue' ? 'b' :
-      role === 'red' ? 'r' :
-      role === 'yellow' ? 'y' :
-      role === 'green' ? 'g' :
-      role === 'orange' ? 'o' :
-      role === 'purple' ? 'p' :
-      role === 'cyan' ? 'c' :
-      role === 'magenta' ? 'm' : role
-    ),
-    room: ROOM_ID
-  };
-  const s = JSON.stringify(payload);
+
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(s);
+    try { socket.send(buf); } catch (err) { /* best-effort */ }
   }
   sendCount += 1;
-  if (sendCount % 20 === 0) {
-    log('sent: ' + s);
-  }
+  if (sendCount % 50 === 0) log('sent binary motion frame len=' + buf.byteLength + ' role=' + role);
 }
 
 // role button handlers
