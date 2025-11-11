@@ -2,6 +2,7 @@
 import os
 from dotenv import load_dotenv
 import json
+import struct
 import argparse
 from aiohttp import web
 
@@ -56,13 +57,81 @@ async def websocket_handler(request):
                         except Exception as e:
                             print(f"[!] Failed to send TEXT to client {client}: {e}")
                 elif msg.type == web.WSMsgType.BINARY:
-                    print(f"[RX BINARY] from {peer} room={room_id}: {len(msg.data)} bytes")
+                    data = msg.data
+                    print(f"[RX BINARY] from {peer} room={room_id}: {len(data)} bytes")
+
+                    # Try to decode our compact motion frame format (client-side gyro binary)
+                    # Format (client, little-endian):
+                    # [0] uint8 message type (1=motion)
+                    # [1] uint8 role index (0..7)
+                    # [2..5] uint32 timestamp (ms modulo 2^32)
+                    # [6..] N float32 values (we expect 8: beta,gamma,orientA,orientB,orientG,ax,ay,az)
+                    try:
+                        if len(data) >= 6 and data[0] == 1:
+                            role_idx = data[1]
+                            ts = int.from_bytes(data[2:6], 'little', signed=False)
+                            payload = data[6:]
+                            floats = []
+                            if len(payload) >= 4 and (len(payload) % 4) == 0:
+                                cnt = len(payload) // 4
+                                fmt = '<' + 'f' * cnt
+                                try:
+                                    floats = list(struct.unpack(fmt, payload))
+                                except struct.error:
+                                    floats = []
+                            # map role index to name when possible
+                            roles = ['blue','red','yellow','green','orange','purple','cyan','magenta']
+                            role_name = roles[role_idx] if (isinstance(role_idx, int) and 0 <= role_idx < len(roles)) else None
+                            motion_msg = {
+                                'type': 'motion',
+                                'role': role_name,
+                                't': ts,
+                                'values': floats,
+                                'raw_len': len(data)
+                            }
+                            # Provide legacy-friendly keys so existing game clients
+                            # that expect named fields (beta/gamma/orientBeta/etc.) continue to work.
+                            try:
+                                if len(floats) >= 1:
+                                    motion_msg['beta'] = floats[0]
+                                if len(floats) >= 2:
+                                    motion_msg['gamma'] = floats[1]
+                                if len(floats) >= 3:
+                                    motion_msg['orientAlpha'] = floats[2]
+                                if len(floats) >= 4:
+                                    motion_msg['orientBeta'] = floats[3]
+                                if len(floats) >= 5:
+                                    motion_msg['orientGamma'] = floats[4]
+                                if len(floats) >= 6:
+                                    motion_msg['ax'] = floats[5]
+                                if len(floats) >= 7:
+                                    motion_msg['ay'] = floats[6]
+                                if len(floats) >= 8:
+                                    motion_msg['az'] = floats[7]
+                            except Exception:
+                                # best-effort mapping; don't block relay on unexpected data
+                                pass
+                            # Broadcast the decoded JSON motion message to all clients in the room
+                            text = json.dumps(motion_msg)
+                            for client in list(rooms.get(room_id, [])):
+                                if client.closed:
+                                    rooms[room_id].discard(client)
+                                    continue
+                                try:
+                                    await client.send_str(text)
+                                except Exception as e:
+                                    print(f"[!] Failed to send decoded motion TEXT to client {client}: {e}")
+                            # fall through to also relay the raw binary to preserve backward compat
+                    except Exception as e:
+                        print(f"[!] Failed to decode binary motion frame: {e}")
+
+                    # Continue to relay the binary payload unchanged (best-effort)
                     for client in list(rooms.get(room_id, [])):
                         if client.closed:
                             rooms[room_id].discard(client)
                             continue
                         try:
-                            await client.send_bytes(msg.data)
+                            await client.send_bytes(data)
                         except Exception as e:
                             print(f"[!] Failed to send BINARY to client {client}: {e}")
                 elif msg.type == web.WSMsgType.ERROR:
