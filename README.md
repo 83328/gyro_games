@@ -43,21 +43,25 @@ Except for Pong which is for 2 players only, all games support up to 8 players.
 
 ## Quick start (Linux / macOS)
 
-1. Create & activate a virtual environment (recommended) and install minimal dependencies:
+1. Install `uv` (fast Python package installer):
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install aiohttp
-pip install cloudflared
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-2. Start the server:
+
+2. Run the startup script (automatically handles dependencies):
 
 ```bash
-python3 ./server.py --host 0.0.0.0 --port 8080 --static ./static
+./start.sh
 ```
-Now the site should be accessible at localhost:8080.
+
+The script will start cloudflared in the background and launch the server at http://localhost:8080.
+
+### Alternative: Run server only (without cloudflared)
+
+```bash
+uv run server.py --host 0.0.0.0 --port 8080 --static ./static
+```
 
 3. (Optional) Create a .env file with a token to require clients to present the same token when connecting:
 
@@ -68,13 +72,7 @@ GYRO_TOKEN=some-secret-token
 # WS_URL=wss://xxxx.ngrok.io/ws
 ```
 
-4. Run the server:
-
-```bash
-./run.sh
-```
-
-5. Open the pages in your browser (or expose the server with ngrok and open the forwarded URL on phones):
+4. Open the pages in your browser (or expose the server with ngrok and open the forwarded URL on phones):
 
 - Host machine: http://localhost:8080/ (the server serves `static/index.html`)
 - Phone (streamer): http://<your-host>:8080/gyro.html
