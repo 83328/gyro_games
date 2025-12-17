@@ -131,7 +131,8 @@ function initPlayers() {
       gridY: row,
       x: col * PIX_SIZE + PIX_SIZE/2,
       y: row * PIX_SIZE + PIX_SIZE/2,
-      vx: 0, vy: 0
+      vx: 0, vy: 0,
+      lastMoveTime: 0
     };
   }
   initField();
@@ -150,23 +151,34 @@ playerCountSel.addEventListener('change', initPlayers);
 
 function handleTilt(role, beta, gamma) {
   const p = players[role]; if(!p) return;
+  
+  // Movement cooldown to prevent too rapid movement (200ms between moves)
+  const now = Date.now();
+  if (now - p.lastMoveTime < 200) return;
+  
   // pixelated movement: move one cell per tilt
+  // Increased threshold from 5 to 15 degrees for more precise control
   let dx = 0, dy = 0;
   if (Math.abs(gamma) > Math.abs(beta)) {
-    dx = gamma > 5 ? 1 : gamma < -5 ? -1 : 0;
+    dx = gamma > 15 ? 1 : gamma < -15 ? -1 : 0;
   }
   // REVERSE up/down controls: tilting up moves marker down, tilting down moves marker up
   if (Math.abs(beta) > Math.abs(gamma)) {
-    dy = beta > 5 ? -1 : beta < -5 ? 1 : 0;
+    dy = beta > 15 ? -1 : beta < -15 ? 1 : 0;
   }
-  // move in grid
-  let newX = Math.max(0, Math.min(GRID_SIZE-1, p.gridX + dx));
-  let newY = Math.max(0, Math.min(GRID_SIZE-1, p.gridY + dy));
-  if (newX !== p.gridX || newY !== p.gridY) {
-    p.gridX = newX;
-    p.gridY = newY;
-    p.x = p.gridX * PIX_SIZE + PIX_SIZE/2;
-    p.y = p.gridY * PIX_SIZE + PIX_SIZE/2;
+  
+  // Only update lastMoveTime if actually moving
+  if (dx !== 0 || dy !== 0) {
+    // move in grid
+    let newX = Math.max(0, Math.min(GRID_SIZE-1, p.gridX + dx));
+    let newY = Math.max(0, Math.min(GRID_SIZE-1, p.gridY + dy));
+    if (newX !== p.gridX || newY !== p.gridY) {
+      p.gridX = newX;
+      p.gridY = newY;
+      p.x = p.gridX * PIX_SIZE + PIX_SIZE/2;
+      p.y = p.gridY * PIX_SIZE + PIX_SIZE/2;
+      p.lastMoveTime = now;
+    }
   }
 }
 
@@ -182,7 +194,7 @@ function update(dt) {
         paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
       } else if(paintField[p.gridY][p.gridX].owner === role && paintField[p.gridY][p.gridX].progress < 1) {
         // Continue filling
-        paintField[p.gridY][p.gridX].progress = Math.min(1, paintField[p.gridY][p.gridX].progress + 0.2);
+        paintField[p.gridY][p.gridX].progress = Math.min(1, paintField[p.gridY][p.gridX].progress + 0.5);
       } else if(paintField[p.gridY][p.gridX].owner !== role) {
         // Overwrite with new owner, start gradual fill
         paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
