@@ -150,6 +150,8 @@ async def websocket_handler(request):
 #                    print(f"[RX] msg.type={msg.type} from {peer} room={room_id}")
             except Exception as inner:
                 print(f"[!] Error processing message from {peer} room={room_id}: {inner}")
+    except asyncio.CancelledError:
+        print(f"[!] WebSocket task cancelled for {peer} room={room_id}")
     finally:
         print(f"[-] Client disconnected: {peer} room={room_id} code={getattr(ws, 'close_code', None)}")
         rooms[room_id].discard(ws)
@@ -228,13 +230,31 @@ def create_app(static_dir: str):
         app.router.add_static('/media', path=media_dir, show_index=False)
         print(f"Serving media files from: {media_dir} at /media")
 
+    # Add API endpoint to serve token (MUST be before static route!)
+    async def token_handler(request):
+        host_header = request.headers.get('Host', request.host)
+        client_ip = request.headers.get('X-Forwarded-For', request.remote)
+        if isinstance(client_ip, str):
+            client_ip = client_ip.split(',')[0].strip()
+        
+        # Check if request came through Cloudflare tunnel domain
+        is_tunnel_domain = 'arthurlimpens.com' in host_header.lower()
+        
+        if is_tunnel_domain:
+            # Request came through Cloudflare tunnel - always use wss:// (secure WebSocket)
+            ws_url = f'wss://{host_header}/ws'
+            print(f"[Token API] Tunnel domain: {host_header} → {ws_url}")
+        else:
+            # Direct access to local IP - use protocol from request
+            proto = 'wss' if request.secure else 'ws'
+            ws_url = f'{proto}://{host_header}/ws'
+            print(f"[Token API] Direct access: {host_header} (secure={request.secure}) → {ws_url}")
+        
+        return web.json_response({'token': AUTH_TOKEN, 'ws_url': ws_url})
+    app.router.add_get('/api/token', token_handler)
+
     # mount static files but disable directory index listing for security/UX
     app.router.add_static('/', path=static_dir, show_index=False)
-
-    # Add API endpoint to serve token
-    async def token_handler(request):
-        return web.json_response({'token': AUTH_TOKEN, 'ws_url': WS_URL})
-    app.router.add_get('/api/token', token_handler)
 
     return app
 
