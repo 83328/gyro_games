@@ -461,26 +461,20 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
-      if(!d||!d.role) return;
-      // Only process messages for this room
-      if(d.room && String(d.room).toUpperCase() !== ROOM_ID) return;
-      if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (
-          d.role === 'b' ? 'blue' :
-          d.role === 'r' ? 'red' :
-          d.role === 'y' ? 'yellow' :
-          d.role === 'g' ? 'green' :
-          d.role === 'o' ? 'orange' :
-          d.role === 'p' ? 'purple' :
-          d.role === 'c' ? 'cyan' :
-          d.role === 'm' ? 'magenta' : d.role
-        );
-      }
-      if(!activeRoles.includes(d.role)) return;
-      if(d.orientBeta!==undefined && d.orientGamma!==undefined){
-        handleTilt(d.role,d.orientBeta,d.orientGamma);
-      }else if(d.beta!==undefined && d.gamma!==undefined){
-        handleTilt(d.role,d.beta,d.gamma);
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || !playerMsg.role) continue;
+          if(playerMsg.room && String(playerMsg.room).toUpperCase() !== ROOM_ID) continue;
+          if(!activeRoles.includes(playerMsg.role)) continue;
+          if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined){
+            handleTilt(playerMsg.role,playerMsg.orientBeta,playerMsg.orientGamma);
+          }else if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){
+            handleTilt(playerMsg.role,playerMsg.beta,playerMsg.gamma);
+          }
+        }
       }
     }catch(e){}
   };

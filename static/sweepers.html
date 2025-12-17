@@ -358,23 +358,28 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage=ev=>{
     try{
       const d=JSON.parse(ev.data);
-      if(!d||!d.role)return;
-      // Only process messages for this room
-      if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
-      // Normalize short codes and color names to color name roles
-      let role = d.role;
-      const codeMap = {
-        b: 'blue', r: 'red', y: 'yellow', g: 'green', o: 'orange', p: 'purple', c: 'cyan', m: 'magenta',
-        blue: 'blue', red: 'red', yellow: 'yellow', green: 'green', orange: 'orange', purple: 'purple', cyan: 'cyan', magenta: 'magenta'
-      };
-      if (codeMap[role] !== undefined) {
-        role = codeMap[role];
-      }
-      if(!activeRoles.includes(role))return;
-      if(d.orientBeta!==undefined&&d.orientGamma!==undefined){
-        handleTilt(role,d.orientBeta,d.orientGamma);
-      } else if(d.beta!==undefined&&d.gamma!==undefined){
-        handleTilt(role,d.beta,d.gamma);
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg||!playerMsg.role) continue;
+          if (playerMsg.room && playerMsg.room.toUpperCase() !== ROOM_ID) continue;
+          let role = playerMsg.role;
+          const codeMap = {
+            b: 'blue', r: 'red', y: 'yellow', g: 'green', o: 'orange', p: 'purple', c: 'cyan', m: 'magenta',
+            blue: 'blue', red: 'red', yellow: 'yellow', green: 'green', orange: 'orange', purple: 'purple', cyan: 'cyan', magenta: 'magenta'
+          };
+          if (codeMap[role] !== undefined) {
+            role = codeMap[role];
+          }
+          if(!activeRoles.includes(role)) continue;
+          if(playerMsg.orientBeta!==undefined&&playerMsg.orientGamma!==undefined){
+            handleTilt(role,playerMsg.orientBeta,playerMsg.orientGamma);
+          } else if(playerMsg.beta!==undefined&&playerMsg.gamma!==undefined){
+            handleTilt(role,playerMsg.beta,playerMsg.gamma);
+          }
+        }
       }
     }catch(e){}
   };

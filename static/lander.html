@@ -444,30 +444,23 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
-      if(!d || d.role==null) return;
-      // Only process messages for this room
-      if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
-      // normalize short role codes (b/r/y/g/o/p/c/m -> blue/red/yellow/green/orange/purple/cyan/magenta)
-      if(typeof d.role === 'string' && d.role.length === 1){
-        d.role = (
-          d.role === 'b' ? 'blue' :
-          d.role === 'r' ? 'red' :
-          d.role === 'y' ? 'yellow' :
-          d.role === 'g' ? 'green' :
-          d.role === 'o' ? 'orange' :
-          d.role === 'p' ? 'purple' :
-          d.role === 'c' ? 'cyan' :
-          d.role === 'm' ? 'magenta' : d.role
-        );
-      }
-      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
-        if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
-        inputs[d.role].rawBeta = d.orientBeta;
-        inputs[d.role].rawGamma = d.orientGamma;
-      } else if(d.beta!==undefined && d.gamma!==undefined){
-        if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
-        inputs[d.role].rawBeta += (d.beta||0) * 0.02;
-        inputs[d.role].rawGamma += (d.gamma||0) * 0.02;
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || playerMsg.role==null) continue;
+          if(playerMsg.room && playerMsg.room.toUpperCase() !== ROOM_ID) continue;
+          if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined && playerMsg.orientBeta!==null){
+            if(!inputs[playerMsg.role]) inputs[playerMsg.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+            inputs[playerMsg.role].rawBeta = playerMsg.orientBeta;
+            inputs[playerMsg.role].rawGamma = playerMsg.orientGamma;
+          } else if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){
+            if(!inputs[playerMsg.role]) inputs[playerMsg.role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+            inputs[playerMsg.role].rawBeta += (playerMsg.beta||0) * 0.02;
+            inputs[playerMsg.role].rawGamma += (playerMsg.gamma||0) * 0.02;
+          }
+        }
       }
     }catch(e){}
   };

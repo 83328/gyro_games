@@ -202,15 +202,15 @@
                 try {
                     const d = JSON.parse(ev.data);
                     if (!d) return;
-                    // Only process messages for this room
-                    if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
-                    if(typeof d.role === 'string' && d.role.length === 1){
-                        d.role = (
-                            d.role === 'b' ? 'blue' :
-                            d.role === 'r' ? 'red' : undefined
-                        );
+                    
+                    // Handle batch messages (aggregated state from server)
+                    if(d.type === 'batch' && Array.isArray(d.players)){
+                        for(const playerMsg of d.players){
+                            if(!playerMsg || !playerMsg.role) continue;
+                            if (playerMsg.room && playerMsg.room.toUpperCase() !== ROOM_ID) continue;
+                            if (playerMsg.beta !== undefined) updatePaddle(playerMsg.beta, playerMsg.role);
+                        }
                     }
-                    if (d.beta !== undefined) updatePaddle(d.beta, d.role);
                 } catch(e) { /* ignore parse errors */ }
             };
             ws.onclose = () => { appendLog('Disconnected'); if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(connect,3000); };

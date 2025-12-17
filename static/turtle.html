@@ -287,24 +287,19 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onopen = ()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); startCountdown(); };
   ws.onmessage = (ev)=>{
     try{
-      const d = JSON.parse(ev.data); if(!d) return;
-      // Only process messages for this room
-      if (d.room && d.room.toUpperCase() !== ROOM_ID) return;
-      if(typeof d.role === 'string' && d.role.length === 1){
-        d.role = (
-          d.role === 'b' ? 'blue' :
-          d.role === 'r' ? 'red' :
-          d.role === 'y' ? 'yellow' :
-          d.role === 'g' ? 'green' :
-          d.role === 'o' ? 'orange' :
-          d.role === 'p' ? 'purple' :
-          d.role === 'c' ? 'cyan' :
-          d.role === 'm' ? 'magenta' : d.role
-        );
+      const d = JSON.parse(ev.data); 
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || !playerMsg.role) continue;
+          if (playerMsg.room && playerMsg.room.toUpperCase() !== ROOM_ID) continue;
+          if(!activeRoles.includes(playerMsg.role)) continue;
+          if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){ handleInput(playerMsg.role, playerMsg.beta, playerMsg.gamma); }
+          else if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined){ handleInput(playerMsg.role, playerMsg.orientBeta, playerMsg.orientGamma); }
+        }
       }
-      if(!activeRoles.includes(d.role)) return;
-      if(d.beta!==undefined && d.gamma!==undefined){ handleInput(d.role, d.beta, d.gamma); }
-      else if(d.orientBeta!==undefined && d.orientGamma!==undefined){ handleInput(d.role, d.orientBeta, d.orientGamma); }
     }catch(e){}
   };
   ws.onclose = ()=>{ appendLog('Disconnected'); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = 'Disconnected'; if(window.__setRoomBadge) window.__setRoomBadge('Disconnected'); setTimeout(()=>location.reload(),2000); };

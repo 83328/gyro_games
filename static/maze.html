@@ -78,7 +78,7 @@ calibBtn.addEventListener('click', ()=>{
 const COLS = 15, ROWS = 15;
 let cell = {w: 0, h: 0};
 // multiplier to scale how fast dots move (1 = default). Change this value in code to tune speed.
-const SPEED_MULTIPLIER = 5; // <- set desired multiplier here
+const SPEED_MULTIPLIER = 2; // <- set desired multiplier here
 let MAX_SPEED = 0;
 
 function resizeCanvasToDisplay(){
@@ -537,58 +537,47 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
       }
 
       const d = JSON.parse(payloadText);
-      if(!d || d.role==null) return;
-      // Accept messages only for this room (case-insensitive)
-      if(d.room && String(d.room).toUpperCase() !== ROOM_ID) {
-        // For debugging, log mismatched room messages
-        console.log('[maze] Ignored message for room', d.room, 'expected', ROOM_ID);
-        return;
-      }
-      if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (
-          d.role === 'b' ? 'blue' :
-          d.role === 'r' ? 'red' :
-          d.role === 'y' ? 'yellow' :
-          d.role === 'g' ? 'green' :
-          d.role === 'o' ? 'orange' :
-          d.role === 'p' ? 'purple' :
-          d.role === 'c' ? 'cyan' :
-          d.role === 'm' ? 'magenta' :
-          d.role
-        );
-      }
-      if(!activeRoles.includes(d.role)) return;
-      if(!players[d.role]){
-        if(d.role === 'orange'){
-          players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
-        } else if(d.role === 'purple'){
-          players.purple = { x: Math.floor(COLS/2), y: 0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0 };
-        } else if(d.role === 'cyan'){
-          players.cyan = { x: COLS-1, y: Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
-        } else if(d.role === 'magenta'){
-          players.magenta = { x: 0, y: Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
-        } else {
-          const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
-          players[d.role] = { x: cx, y: cy, px: (cx+0.5)*cell.w, py: (cy+0.5)*cell.h, vx:0, vy:0 };
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || playerMsg.role==null) continue;
+          if(playerMsg.room && String(playerMsg.room).toUpperCase() !== ROOM_ID) continue;
+          if(!activeRoles.includes(playerMsg.role)) continue;
+          if(!players[playerMsg.role]){
+            if(playerMsg.role === 'orange'){
+              players.orange = { x: Math.floor(COLS/2), y: ROWS-1, px: (Math.floor(COLS/2)+0.5)*cell.w, py: ((ROWS-1)+0.5)*cell.h, vx:0, vy:0 };
+            } else if(playerMsg.role === 'purple'){
+              players.purple = { x: Math.floor(COLS/2), y: 0, px: (Math.floor(COLS/2)+0.5)*cell.w, py: (0+0.5)*cell.h, vx:0, vy:0 };
+            } else if(playerMsg.role === 'cyan'){
+              players.cyan = { x: COLS-1, y: Math.floor(ROWS/2), px: ((COLS-1)+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+            } else if(playerMsg.role === 'magenta'){
+              players.magenta = { x: 0, y: Math.floor(ROWS/2), px: (0+0.5)*cell.w, py: (Math.floor(ROWS/2)+0.5)*cell.h, vx:0, vy:0 };
+            } else {
+              const cx = Math.floor(COLS/2), cy = Math.floor(ROWS/2);
+              players[playerMsg.role] = { x: cx, y: cy, px: (cx+0.5)*cell.w, py: (cy+0.5)*cell.h, vx:0, vy:0 };
+            }
+          }
+          if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined && playerMsg.orientBeta!==null){
+            orientationAvailable = true;
+            lastDeviceOrientation = { beta: playerMsg.orientBeta, gamma: playerMsg.orientGamma, alpha: playerMsg.orientAlpha };
+            if(!rotState[playerMsg.role]) rotState[playerMsg.role] = {b:0,g:0,ts:Date.now()};
+            rotState[playerMsg.role].ts = Date.now();
+            handleTilt(playerMsg.role, playerMsg.orientBeta, playerMsg.orientGamma);
+          } else if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){
+            const now = Date.now();
+            if(!rotState[playerMsg.role]) rotState[playerMsg.role] = {b:0,g:0,ts:now};
+            const state = rotState[playerMsg.role];
+            const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02;
+            state.ts = now;
+            state.b += (playerMsg.beta || 0) * dt;
+            state.g += (playerMsg.gamma || 0) * dt;
+            state.b *= 0.995; state.g *= 0.995;
+            lastDeviceOrientation = { beta: state.b, gamma: state.g };
+            handleTilt(playerMsg.role, state.b, state.g);
+          }
         }
-      }
-      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
-        orientationAvailable = true;
-        lastDeviceOrientation = { beta: d.orientBeta, gamma: d.orientGamma, alpha: d.orientAlpha };
-        if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:Date.now()};
-        rotState[d.role].ts = Date.now();
-        handleTilt(d.role, d.orientBeta, d.orientGamma);
-      } else if(d.beta!==undefined && d.gamma!==undefined){
-        const now = Date.now();
-        if(!rotState[d.role]) rotState[d.role] = {b:0,g:0,ts:now};
-        const state = rotState[d.role];
-        const dt = Math.min(0.1, (now - state.ts)/1000) || 0.02;
-        state.ts = now;
-        state.b += (d.beta || 0) * dt;
-        state.g += (d.gamma || 0) * dt;
-        state.b *= 0.995; state.g *= 0.995;
-        lastDeviceOrientation = { beta: state.b, gamma: state.g };
-        handleTilt(d.role, state.b, state.g);
       }
     }catch(err){
       console.error('[maze] Failed to handle ws message', err, ev.data);

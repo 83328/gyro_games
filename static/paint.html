@@ -463,7 +463,27 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage = ev => {
     try {
       const d = JSON.parse(ev.data);
-      if (!d || !d.role) return;
+      if (!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if (d.type === 'batch' && Array.isArray(d.players)) {
+        for (const playerMsg of d.players) {
+          if (!playerMsg || !playerMsg.role) continue;
+          // Only process messages for this room
+          if(playerMsg.room && String(playerMsg.room).toUpperCase() !== ROOM_ID) continue;
+          if (!activeRoles.includes(playerMsg.role)) continue;
+          
+          if (playerMsg.orientBeta !== undefined && playerMsg.orientGamma !== undefined) {
+            handleTilt(playerMsg.role, playerMsg.orientBeta, playerMsg.orientGamma);
+          } else if (playerMsg.beta !== undefined && playerMsg.gamma !== undefined) {
+            handleTilt(playerMsg.role, playerMsg.beta, playerMsg.gamma);
+          }
+        }
+        return;
+      }
+      
+      // Handle legacy single-player messages (backward compatibility)
+      if (!d.role) return;
       // Only process messages for this room
       if(d.room && String(d.room).toUpperCase() !== ROOM_ID) return;
       // Normalize short role codes to full names

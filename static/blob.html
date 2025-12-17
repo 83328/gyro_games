@@ -134,32 +134,26 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
-      if(!d || !d.role) return;
-      // Only process messages for this room
-      if(d.room && String(d.room).toUpperCase() !== ROOM_ID) return;
-      // normalize short role codes (b/r/y/g/o/p/c/m -> blue/red/yellow/green/orange/purple/cyan/magenta)
-      if(typeof d.role === 'string' && d.role.length===1){
-        d.role = (
-          d.role === 'b' ? 'blue' :
-          d.role === 'r' ? 'red' :
-          d.role === 'y' ? 'yellow' :
-          d.role === 'g' ? 'green' :
-          d.role === 'o' ? 'orange' :
-          d.role === 'p' ? 'purple' :
-          d.role === 'c' ? 'cyan' :
-          d.role === 'm' ? 'magenta' : d.role
-        );
-      }
-      // store orientation if provided, else integrate beta/gamma
-      const t = Date.now();
-      if(!inputs[d.role]) inputs[d.role] = {rawBeta:0, rawGamma:0, ts:0};
-      if(d.orientBeta!==undefined && d.orientGamma!==undefined && d.orientBeta!==null){
-        inputs[d.role].rawBeta = d.orientBeta; inputs[d.role].rawGamma = d.orientGamma; inputs[d.role].ts = t;
-      } else if(d.beta!==undefined && d.gamma!==undefined){
-        // integrate small amount
-        inputs[d.role].rawBeta = (inputs[d.role].rawBeta || 0) + (d.beta||0)*0.02;
-        inputs[d.role].rawGamma = (inputs[d.role].rawGamma || 0) + (d.gamma||0)*0.02;
-        inputs[d.role].ts = t;
+      if(!d) return;
+      
+      // Handle batch messages (aggregated state from server)
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || !playerMsg.role) continue;
+          // Only process messages for this room
+          if(playerMsg.room && String(playerMsg.room).toUpperCase() !== ROOM_ID) continue;
+          if(!inputs[playerMsg.role]) inputs[playerMsg.role] = {rawBeta:0, rawGamma:0, ts:0};
+          
+          if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined && playerMsg.orientBeta!==null){
+            inputs[playerMsg.role].rawBeta = playerMsg.orientBeta;
+            inputs[playerMsg.role].rawGamma = playerMsg.orientGamma;
+            inputs[playerMsg.role].ts = Date.now();
+          } else if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){
+            inputs[playerMsg.role].rawBeta = (inputs[playerMsg.role].rawBeta || 0) + (playerMsg.beta||0)*0.02;
+            inputs[playerMsg.role].rawGamma = (inputs[playerMsg.role].rawGamma || 0) + (playerMsg.gamma||0)*0.02;
+            inputs[playerMsg.role].ts = Date.now();
+          }
+        }
       }
     }catch(e){}
   };

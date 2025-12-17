@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import json
 import struct
 import argparse
+import asyncio
 from aiohttp import web
 
 # Load .env file if present
@@ -16,6 +17,10 @@ WS_URL = os.environ.get('WS_URL')
 
 # Store clients per room: {room_id: set(ws)}
 rooms = {}
+# Store pending motion state per room: {room_id: {role_name: motion_msg}}
+room_states = {}
+# Aggregation settings
+AGGREGATION_INTERVAL = 0.033  # ~30 FPS broadcast rate (33ms)
 message_count = 0  # Counter for throttled logging
 binary_count = 0
 # throttle settings for noisy binary frames
@@ -41,6 +46,7 @@ async def websocket_handler(request):
     # Add client to room
     if room_id not in rooms:
         rooms[room_id] = set()
+        room_states[room_id] = {}
     rooms[room_id].add(ws)
 
     try:
@@ -129,29 +135,15 @@ async def websocket_handler(request):
                             except Exception:
                                 # best-effort mapping; don't block relay on unexpected data
                                 pass
-                            # Broadcast the decoded JSON motion message to all clients in the room
-                            text = json.dumps(motion_msg)
-                            for client in list(rooms.get(room_id, [])):
-                                if client.closed:
-                                    rooms[room_id].discard(client)
-                                    continue
-                                try:
-                                    await client.send_str(text)
-                                except Exception as e:
-                                    print(f"[!] Failed to send decoded motion TEXT to client {client}: {e}")
-                            # fall through to also relay the raw binary to preserve backward compat
+                            # Store the decoded motion state for aggregation instead of immediate relay
+                            if room_id not in room_states:
+                                room_states[room_id] = {}
+                            room_states[room_id][role_name] = motion_msg
+                            # No longer doing immediate relay - aggregation task will handle it
                     except Exception as e:
                         print(f"[!] Failed to decode binary motion frame: {e}")
 
-                    # Continue to relay the binary payload unchanged (best-effort)
-                    for client in list(rooms.get(room_id, [])):
-                        if client.closed:
-                            rooms[room_id].discard(client)
-                            continue
-                        try:
-                            await client.send_bytes(data)
-                        except Exception as e:
-                            print(f"[!] Failed to send BINARY to client {client}: {e}")
+                    # REMOVED: No longer relaying raw binary to avoid double bandwidth
                 elif msg.type == web.WSMsgType.ERROR:
                     print('WebSocket connection closed with exception %s' % ws.exception())
 #                else:
@@ -163,12 +155,64 @@ async def websocket_handler(request):
         rooms[room_id].discard(ws)
         if not rooms[room_id]:
             del rooms[room_id]
+            if room_id in room_states:
+                del room_states[room_id]
 
     return ws
+
+async def broadcast_aggregated_state():
+    """Background task that periodically broadcasts aggregated state to all rooms."""
+    while True:
+        try:
+            await asyncio.sleep(AGGREGATION_INTERVAL)
+            
+            # Iterate through all rooms
+            for room_id in list(rooms.keys()):
+                clients = list(rooms.get(room_id, []))
+                if not clients:
+                    continue
+                
+                # Get current state for this room
+                state = room_states.get(room_id, {})
+                if not state:
+                    continue
+                
+                # Create aggregated message with all player states
+                aggregated_msg = {
+                    'type': 'batch',
+                    'players': list(state.values())
+                }
+                
+                # Broadcast to all clients in this room
+                text = json.dumps(aggregated_msg)
+                for client in clients:
+                    if client.closed:
+                        rooms[room_id].discard(client)
+                        continue
+                    try:
+                        await client.send_str(text)
+                    except Exception as e:
+                        print(f"[!] Failed to broadcast aggregated state: {e}")
+                        rooms[room_id].discard(client)
+        except Exception as e:
+            print(f"[!] Error in broadcast_aggregated_state: {e}")
+            await asyncio.sleep(1)  # Back off on error
 
 def create_app(static_dir: str):
     app = web.Application()
     app.router.add_get('/ws', websocket_handler)
+    
+    # Start background task for aggregated broadcasting
+    async def start_background_tasks(app):
+        app['broadcast_task'] = asyncio.create_task(broadcast_aggregated_state())
+    
+    async def cleanup_background_tasks(app):
+        app['broadcast_task'].cancel()
+        await app['broadcast_task']
+    
+    app.on_startup.append(start_background_tasks)
+    app.on_cleanup.append(cleanup_background_tasks)
+    
     # Serve index.html at root explicitly and disable directory listings
     async def index_handler(request):
         index_path = os.path.join(static_dir, 'index.html')
