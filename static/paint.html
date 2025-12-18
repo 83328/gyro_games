@@ -60,7 +60,7 @@ function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
-const playerCount = getPlayerCountFromUrl();
+let playerCount = getPlayerCountFromUrl();
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const orangeScoreContainer = document.getElementById('orangeScoreContainer');
@@ -142,6 +142,20 @@ function initPlayers() {
   if(sMagenta) sMagenta.textContent = 0;
 }
 initPlayers();
+
+// Update player count from room meta and reinitialize
+function applyPlayerCountFromMeta(n){
+  const pc = parseInt(n, 10);
+  if (!(pc >= 2 && pc <= 8)) return;
+  if (pc === playerCount) return;
+  playerCount = pc;
+  try {
+    const u = new URL(window.location);
+    u.searchParams.set('players', playerCount);
+    window.history.replaceState({}, '', u);
+  } catch(e){}
+  initPlayers();
+}
 
 function handleTilt(role, beta, gamma) {
   const p = players[role]; if(!p) return;
@@ -453,11 +467,22 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
     appendLog(`Connected, Room ID: ${ROOM_ID}`);
     const rb = document.getElementById('roomBadge'); if(rb) rb.textContent = `Connected — Room ID: ${ROOM_ID}`;
     if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room ID: ${ROOM_ID}`);
+    // Discover and announce room meta
+    try { ws.send(JSON.stringify({ type: 'request-meta', t: Date.now() })); } catch(e){}
+    try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
   };
   ws.onmessage = ev => {
     try {
       const d = JSON.parse(ev.data);
       if (!d) return;
+      if (d.type === 'room-meta' && d.playerCount !== undefined) {
+        applyPlayerCountFromMeta(d.playerCount);
+        return;
+      }
+      if (d.type === 'request-meta') {
+        try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
+        return;
+      }
       
       // Handle batch messages (aggregated state from server)
       if (d.type === 'batch' && Array.isArray(d.players)) {

@@ -76,7 +76,7 @@ function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
-const playerCount = getPlayerCountFromUrl();
+let playerCount = getPlayerCountFromUrl();
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const orangeScoreContainer = document.getElementById('orangeScoreContainer');
@@ -154,6 +154,20 @@ function initPlayers(){
   startCountdown();
 }
 initPlayers();
+
+// Update player count from room meta and reinitialize
+function applyPlayerCountFromMeta(n){
+  const pc = parseInt(n, 10);
+  if (!(pc >= 2 && pc <= 8)) return;
+  if (pc === playerCount) return;
+  playerCount = pc;
+  try {
+    const u = new URL(window.location);
+    u.searchParams.set('players', playerCount);
+    window.history.replaceState({}, '', u);
+  } catch(e){}
+  resetRace();
+}
 
 // countdown logic
 function startCountdown(){
@@ -278,11 +292,24 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws = new WebSocket(wsUrl);
-  ws.onopen = ()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); startCountdown(); };
+  ws.onopen = ()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); const ms = document.getElementById('msgSub'); if(ms) ms.textContent = `Connected — Room ${ROOM_ID}`; if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); 
+    // Discover and announce room meta
+    try { ws.send(JSON.stringify({ type: 'request-meta', t: Date.now() })); } catch(e){}
+    try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
+    startCountdown(); };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data); 
       if(!d) return;
+      // Room metadata updates
+      if (d.type === 'room-meta' && d.playerCount !== undefined) {
+        applyPlayerCountFromMeta(d.playerCount);
+        return;
+      }
+      if (d.type === 'request-meta') {
+        try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
+        return;
+      }
       
       // Handle batch messages (aggregated state from server)
       if(d.type === 'batch' && Array.isArray(d.players)){

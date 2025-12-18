@@ -126,10 +126,26 @@ function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
-const playerCount = getPlayerCountFromUrl();
+let playerCount = getPlayerCountFromUrl();
 let players = {};
 let running = false; // whether physics/controls are active
 let _countdownTimer = null;
+
+// Apply playerCount from room metadata and reinitialize game state
+function applyPlayerCountFromMeta(n){
+  const pc = parseInt(n, 10);
+  if (!(pc >= 2 && pc <= 8)) return;
+  if (pc === playerCount) return;
+  playerCount = pc;
+  try {
+    // reflect in URL for consistency
+    const u = new URL(window.location);
+    u.searchParams.set('players', playerCount);
+    window.history.replaceState({}, '', u);
+  } catch(e){}
+  // Reinitialize to match new count
+  resetRound();
+}
 
 function initPlayers(){
   const n = playerCount;
@@ -434,11 +450,23 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   ws.onopen = ()=>{
     appendLog(`Connected, Room ID: ${ROOM_ID}`);
     if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
+    // Ask others for room meta and also announce our current understanding
+    try { ws.send(JSON.stringify({ type: 'request-meta', t: Date.now() })); } catch(e){}
+    try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
   };
   ws.onmessage = (ev)=>{
     try{
       const d = JSON.parse(ev.data);
       if(!d) return;
+      // Room metadata updates
+      if (d.type === 'room-meta' && d.playerCount !== undefined) {
+        applyPlayerCountFromMeta(d.playerCount);
+        return;
+      }
+      if (d.type === 'request-meta') {
+        try { ws.send(JSON.stringify({ type: 'room-meta', playerCount: playerCount, t: Date.now() })); } catch(e){}
+        return;
+      }
       
       // Handle batch messages (aggregated state from server)
       if(d.type === 'batch' && Array.isArray(d.players)){

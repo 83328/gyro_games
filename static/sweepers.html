@@ -51,7 +51,17 @@ function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
-const playerCount = getPlayerCountFromUrl();
+let playerCount = getPlayerCountFromUrl();
+function applyPlayerCountFromMeta(newCount){
+  const clamped = Math.max(2, Math.min(8, parseInt(newCount || playerCount, 10)));
+  if(Number.isNaN(clamped) || clamped === playerCount) return;
+  playerCount = clamped;
+  const params = new URLSearchParams(window.location.search);
+  params.set('players', String(playerCount));
+  const qs = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}?${qs}`);
+  resetGame('Player count updated');
+}
 const scoreDisplay = document.getElementById('scoreDisplay');
 
 const colorPalette = [
@@ -88,6 +98,13 @@ const ASTEROID_COUNT = 6;
 const ARENA_RADIUS = 270;
 const ARENA_CENTER = {x: canvas.width/2, y: canvas.height/2};
 
+function resetGame(reason){
+  gameActive = true;
+  initPlayers();
+  winOverlay.style.display = 'none';
+  appendLog(reason || '');
+}
+
 // --- Initialize players and asteroids ---
 function initPlayers() {
   const n = playerCount;
@@ -112,10 +129,7 @@ function initPlayers() {
 
 // Restart button logic
   document.getElementById('restart').addEventListener('click', () => {
-  gameActive = true;
-  initPlayers();
-  winOverlay.style.display = 'none';
-  appendLog('');
+  resetGame('Restarted');
 });
 
 function initAsteroids() {
@@ -348,11 +362,27 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   // Add room id to wsUrl
   wsUrl += `&room=${encodeURIComponent(ROOM_ID)}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{ appendLog(`Connected, Room ID: ${ROOM_ID}`); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`); };
+  ws.onopen=()=>{
+    appendLog(`Connected, Room ID: ${ROOM_ID}`);
+    if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
+    ws.send(JSON.stringify({type:'request-meta', room:ROOM_ID}));
+    ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+  };
   ws.onmessage=ev=>{
     try{
       const d=JSON.parse(ev.data);
       if(!d) return;
+      if(d.type==='room-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        if(d.meta && d.meta.playerCount!==undefined) applyPlayerCountFromMeta(d.meta.playerCount);
+        return;
+      }
+      if(d.type==='request-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+        return;
+      }
+      if(d.type==='batch' && d.meta && d.meta.playerCount!==undefined){
+        applyPlayerCountFromMeta(d.meta.playerCount);
+      }
       
       // Handle batch messages (aggregated state from server)
       if(d.type === 'batch' && Array.isArray(d.players)){

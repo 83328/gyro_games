@@ -56,7 +56,17 @@ function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
-const playerCount = getPlayerCountFromUrl();
+let playerCount = getPlayerCountFromUrl();
+function applyPlayerCountFromMeta(newCount){
+  const clamped = Math.max(2, Math.min(8, parseInt(newCount || playerCount, 10)));
+  if(Number.isNaN(clamped) || clamped === playerCount) return;
+  playerCount = clamped;
+  const params = new URLSearchParams(window.location.search);
+  params.set('players', String(playerCount));
+  const qs = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}?${qs}`);
+  resetGame('Player count updated');
+}
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const sBlue = document.getElementById('sBlue');
@@ -173,6 +183,19 @@ function initPlayers(){
 initPlayers();
 const newRoundBtn = document.getElementById('newRound');
 let gameMessage = '';
+
+function resetGame(reason){
+  gameMessage = '';
+  bullets = [];
+  powerup = null;
+  for(const r of Object.keys(scores)) scores[r]=0;
+  for(const k of Object.keys(scoreSpans)){
+    const sp = scoreSpans[k]; if(sp) sp.textContent = 0;
+  }
+  if(newRoundBtn) newRoundBtn.style.display='none';
+  if(reason) appendLog(reason);
+  initPlayers();
+}
 
 // draw
 function draw(){
@@ -451,11 +474,27 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
   const proto=(location.protocol==='https:')?'wss':'ws';
   const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
   ws=new WebSocket(wsUrl);
-  ws.onopen=()=>{appendLog('Connected'); if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);};
+  ws.onopen=()=>{
+    appendLog('Connected');
+    if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
+    ws.send(JSON.stringify({type:'request-meta', room:ROOM_ID}));
+    ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+  };
   ws.onmessage=(ev)=>{
     try{
       const d=JSON.parse(ev.data);
       if(!d) return;
+      if(d.type==='room-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        if(d.meta && d.meta.playerCount!==undefined) applyPlayerCountFromMeta(d.meta.playerCount);
+        return;
+      }
+      if(d.type==='request-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+        return;
+      }
+      if(d.type==='batch' && d.meta && d.meta.playerCount!==undefined){
+        applyPlayerCountFromMeta(d.meta.playerCount);
+      }
       
       // Handle batch messages (aggregated state from server)
       if(d.type === 'batch' && Array.isArray(d.players)){
@@ -486,18 +525,7 @@ requestAnimationFrame(frame);
 
 if(newRoundBtn){
   newRoundBtn.addEventListener('click', ()=>{
-    gameMessage = '';
-    bullets = [];
-    powerup = null;
-    // reset scores to zero for active roles
-    for(const r of Object.keys(scores)) scores[r]=0;
-    // clear all score spans via the scoreSpans mapping
-    for(const k of Object.keys(scoreSpans)){
-      const sp = scoreSpans[k]; if(sp) sp.textContent = 0;
-    }
-    if(newRoundBtn) newRoundBtn.style.display='none';
-    appendLog('New round');
-    initPlayers();
+    resetGame('New round');
   });
 }
 </script>
