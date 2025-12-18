@@ -29,16 +29,6 @@
   <h1>Asteroid Sweepers</h1>
   
   <div id="scores">
-    Players:
-    <select id="playerCount" style="margin:0 8px">
-      <option value="2">2 players</option>
-      <option value="3">3 players</option>
-      <option value="4">4 players</option>
-      <option value="5">5 players</option>
-      <option value="6">6 players</option>
-      <option value="7">7 players</option>
-      <option value="8">8 players</option>
-    </select>
     <button id="restart" style="margin-left:8px">Restart</button>
     <div id="scoreDisplay"></div>
   </div>
@@ -56,7 +46,12 @@ function appendLog(msg){
     else console.log(msg);
   }catch(e){ console.log(msg); }
 }
-const playerCountSel = document.getElementById('playerCount');
+// Read player count from URL parameter
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
+}
+const playerCount = getPlayerCountFromUrl();
 const scoreDisplay = document.getElementById('scoreDisplay');
 
 const colorPalette = [
@@ -95,7 +90,7 @@ const ARENA_CENTER = {x: canvas.width/2, y: canvas.height/2};
 
 // --- Initialize players and asteroids ---
 function initPlayers() {
-  const n = parseInt(playerCountSel.value, 10);
+  const n = playerCount;
   activeRoles = Array.from({length: n}, (_, i) => colorNames[i].toLowerCase());
   players = {};
   scores = {};
@@ -114,7 +109,6 @@ function initPlayers() {
   initAsteroids();
   updateScoreDisplay();
 }
-playerCountSel.addEventListener('change', initPlayers);
 
 // Restart button logic
   document.getElementById('restart').addEventListener('click', () => {

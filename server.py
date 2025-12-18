@@ -19,6 +19,8 @@ WS_URL = os.environ.get('WS_URL')
 rooms = {}
 # Store pending motion state per room: {room_id: {role_name: motion_msg}}
 room_states = {}
+# Store lightweight room metadata (e.g., playerCount) per room: {room_id: {playerCount: int, ...}}
+room_meta = {}
 # Aggregation settings
 AGGREGATION_INTERVAL = 0.033  # ~30 FPS broadcast rate (33ms)
 message_count = 0  # Counter for throttled logging
@@ -49,12 +51,79 @@ async def websocket_handler(request):
         room_states[room_id] = {}
     rooms[room_id].add(ws)
 
+    # If we already have metadata for this room (e.g., playerCount), push it to the newcomer
+    try:
+        if room_meta.get(room_id):
+            await ws.send_str(json.dumps({ 'type': 'room-meta', **room_meta[room_id] }))
+    except Exception:
+        pass
+
     try:
         async for msg in ws:
             try:
                 if msg.type == web.WSMsgType.TEXT:
                     global message_count
                     message_count += 1
+
+                    # Best-effort JSON parse to handle room-meta/request-meta; fall back to relay
+                    payload = None
+                    try:
+                        payload = json.loads(msg.data)
+                    except Exception:
+                        payload = None
+
+                    handled = False
+                    if isinstance(payload, dict) and payload.get('type'):
+                        mtype = payload.get('type')
+
+                        if mtype == 'room-meta':
+                            # Sanitize and store meta (currently only playerCount)
+                            pc = payload.get('playerCount')
+                            try:
+                                pc_int = int(pc)
+                                if 2 <= pc_int <= 8:
+                                    room_meta[room_id] = { 'playerCount': pc_int }
+                                else:
+                                    room_meta.setdefault(room_id, {})
+                            except Exception:
+                                room_meta.setdefault(room_id, {})
+
+                            # Broadcast the meta to everyone in the room (including sender)
+                            meta_msg = json.dumps({'type': 'room-meta', **room_meta.get(room_id, {})})
+                            for client in list(rooms.get(room_id, [])):
+                                if client.closed:
+                                    rooms[room_id].discard(client)
+                                    continue
+                                try:
+                                    await client.send_str(meta_msg)
+                                except Exception as e:
+                                    print(f"[!] Failed to send room-meta to client {client}: {e}")
+                            handled = True
+
+                        elif mtype == 'request-meta':
+                            # Reply only to the requester with current meta if available
+                            if room_meta.get(room_id):
+                                try:
+                                    await ws.send_str(json.dumps({'type': 'room-meta', **room_meta[room_id]}))
+                                except Exception:
+                                    pass
+                            # Also fan out a meta request to all peers in the room so that
+                            # any client that knows the playerCount can answer.
+                            try:
+                                for client in list(rooms.get(room_id, [])):
+                                    if client is ws:
+                                        continue
+                                    if client.closed:
+                                        rooms[room_id].discard(client)
+                                        continue
+                                    await client.send_str(json.dumps({'type': 'request-meta', 'from': 'server'}))
+                            except Exception:
+                                pass
+                            handled = True
+
+                    if handled:
+                        continue
+
                     if message_count % 125 == 0:
                         print(f"[RX TEXT #{message_count}] from {peer} room={room_id}: {msg.data[:100]}...")
                     # Relay only to clients in the same room
@@ -159,6 +228,8 @@ async def websocket_handler(request):
             del rooms[room_id]
             if room_id in room_states:
                 del room_states[room_id]
+            if room_id in room_meta:
+                del room_meta[room_id]
 
     return ws
 
@@ -179,11 +250,13 @@ async def broadcast_aggregated_state():
                 if not state:
                     continue
                 
-                # Create aggregated message with all player states
+                # Create aggregated message with all player states and optional room meta
                 aggregated_msg = {
                     'type': 'batch',
                     'players': list(state.values())
                 }
+                if room_id in room_meta and isinstance(room_meta[room_id], dict):
+                    aggregated_msg.update(room_meta[room_id])
                 
                 # Broadcast to all clients in this room
                 text = json.dumps(aggregated_msg)

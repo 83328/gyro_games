@@ -29,16 +29,6 @@
   <h1>Paint</h1>
   
   <div id="scores">
-    <label for="playerCount" style="font-weight:600;margin-right:4px;">Players:</label>
-    <select id="playerCount" style="margin-right:8px">
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-      <option value="6">6</option>
-      <option value="7">7</option>
-      <option value="8">8</option>
-    </select>
   <span id="blueScoreContainer" class="role">Blue <span id="sBlue">0</span></span>
   <span id="redScoreContainer" class="role">Red <span id="sRed">0</span></span>
     <span id="yellowScoreContainer" class="role" style="display:none">Yellow <span id="sYellow">0</span></span>
@@ -65,7 +55,12 @@ function appendLog(msg){
     else console.log(msg);
   }catch(e){ console.log(msg); }
 }
-const playerCountSel = document.getElementById('playerCount');
+// Read player count from URL parameter
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
+}
+const playerCount = getPlayerCountFromUrl();
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const orangeScoreContainer = document.getElementById('orangeScoreContainer');
@@ -110,7 +105,7 @@ function initField() {
 }
 
 function initPlayers() {
-  const n = parseInt(playerCountSel.value, 10);
+  const n = playerCount;
   const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
   activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
   yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
@@ -147,7 +142,6 @@ function initPlayers() {
   if(sMagenta) sMagenta.textContent = 0;
 }
 initPlayers();
-playerCountSel.addEventListener('change', initPlayers);
 
 function handleTilt(role, beta, gamma) {
   const p = players[role]; if(!p) return;

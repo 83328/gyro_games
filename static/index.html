@@ -84,6 +84,54 @@
   const addControllerBtn = document.getElementById('addControllerBtn');
   const playerCountSelect = document.getElementById('playerCount');
 
+  let ws = null; // WebSocket connection for broadcasting room metadata
+
+  // Connect to WebSocket to broadcast player count for this room
+  function connectWebSocket() {
+    fetch('/api/token')
+      .then(response => response.json())
+      .then(data => {
+        const token = data.token;
+        const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+        const wsUrl = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${roomCode}`;
+        
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          console.log('[Index] WebSocket connected to room', roomCode);
+          // Announce the current player count for this room
+          try {
+            ws.send(JSON.stringify({ type: 'room-meta', playerCount: parseInt(playerCountSelect.value, 10), t: Date.now() }));
+          } catch (e) { /* best-effort */ }
+        };
+        ws.onmessage = (ev) => {
+          try {
+            const data = JSON.parse(ev.data);
+            // If someone requests meta, reply with our player count
+            if (data && data.type === 'request-meta') {
+              try {
+                ws.send(JSON.stringify({ type: 'room-meta', playerCount: parseInt(playerCountSelect.value, 10), t: Date.now() }));
+              } catch (e) { /* best-effort */ }
+            }
+          } catch (e) { /* ignore */ }
+        };
+        ws.onclose = () => {
+          console.log('[Index] WebSocket disconnected');
+          ws = null;
+          // Reconnect after a delay
+          setTimeout(connectWebSocket, 5000);
+        };
+        ws.onerror = (e) => {
+          console.log('[Index] WebSocket error');
+        };
+      })
+      .catch(err => {
+        console.log('[Index] Failed to connect WebSocket:', err);
+      });
+  }
+
+  // Start WebSocket connection
+  connectWebSocket();
+
   // Build a URL to the streaming page with ?room=ROOMCODE&players=N
   function buildUrl(){
     const players = playerCountSelect.value;
@@ -104,6 +152,12 @@
   playerCountSelect.addEventListener('change', () => {
     updateGameLinks();
     updateQr();
+    // Broadcast the new player count to the room via websocket if connected
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify({ type: 'room-meta', playerCount: parseInt(playerCountSelect.value, 10), t: Date.now() }));
+      } catch (e) { /* best-effort */ }
+    }
   });
   
   updateGameLinks();

@@ -30,17 +30,6 @@
   <h1 style="margin-bottom:4px">Moon Lander</h1>
   
   <div class="hud">
-    <label style="margin-left:8px">Players:
-      <select id="playerCount" style="margin-left:6px">
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-        </select>
-    </label>
     <button id="restart">Restart</button>
     <button id="fs">Fullscreen</button>
     <!-- per-role score containers will be appended here -->
@@ -132,12 +121,18 @@ function groundYAt(x){
 
 // players state (dynamic based on selected player count). Roles in order: blue, red, yellow, green, orange, purple, cyan, magenta
 const ROLE_ORDER = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+// Read player count from URL parameter
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
+}
+const playerCount = getPlayerCountFromUrl();
 let players = {};
 let running = false; // whether physics/controls are active
 let _countdownTimer = null;
 
 function initPlayers(){
-  const n = parseInt(document.getElementById('playerCount')?.value || 2, 10);
+  const n = playerCount;
   pads = [];
   players = {};
   const padW = 60;
@@ -240,7 +235,6 @@ resetRound();
 
 // respond to window size changes
 window.addEventListener('resize', ()=>{ resizeCanvasToDisplay(); });
-document.getElementById('playerCount')?.addEventListener('change', ()=>{ initPlayers(); resetRound(); });
 
 // fullscreen toggle
 const fsBtn = document.getElementById('fs');

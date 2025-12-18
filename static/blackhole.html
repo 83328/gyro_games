@@ -28,16 +28,6 @@
   <h1>Blackhole Blasters</h1>
   
   <div id="scores">
-    Players:
-    <select id="playerCount" style="margin:0 8px">
-      <option value="2">2 players</option>
-      <option value="3">3 players</option>
-      <option value="4">4 players</option>
-      <option value="5">5 players</option>
-      <option value="6">6 players</option>
-      <option value="7">7 players</option>
-      <option value="8">8 players</option>
-    </select>
     <button id="newRound" style="margin-left:12px;display:none">New round</button>
   <span id="blueScoreContainer">Blue: <span id="sBlue">0</span></span> — <span id="redScoreContainer">Red: <span id="sRed">0</span></span>
   <span id="yellowScoreContainer" style="display:none"> — <span id="lblYellow">Yellow</span>: <span id="sYellow">0</span></span>
@@ -61,7 +51,12 @@ function appendLog(msg){
     else console.log(msg);
   }catch(e){ console.log(msg); }
 }
-const playerCountSel = document.getElementById('playerCount');
+// Read player count from URL parameter
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
+}
+const playerCount = getPlayerCountFromUrl();
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const sBlue = document.getElementById('sBlue');
@@ -127,7 +122,7 @@ window.addEventListener('resize', resizeCanvasToDisplay);
 
 // init players
 function initPlayers(){
-  const n = Math.max(2, Math.min(8, parseInt(playerCountSel.value,10)));
+  const n = playerCount;
   const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
   activeRoles = possible.slice(0, n);
 
@@ -176,7 +171,6 @@ function initPlayers(){
   }
 }
 initPlayers();
-playerCountSel.addEventListener('change',()=>initPlayers());
 const newRoundBtn = document.getElementById('newRound');
 let gameMessage = '';
 

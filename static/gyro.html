@@ -44,7 +44,7 @@
   </div>
   <div style="height:100px;">&nbsp;</div>
   <div class="roles">
-    <div style="position:fixed;bottom:0;left:0;width:100%;background:#111;padding:12px 0 8px 0;display:flex;align-items:center;justify-content:center;gap:8px;z-index:10;box-shadow:0 -2px 12px #0008;">
+    <div style="position:fixed;bottom:0;left:0;width:100%;background:#111;padding:12px 0 8px 0;display:flex;align-items:center;justify-content:center;gap:8px;z-index:10;box-shadow:0 -2px 12px #0008;flex-wrap:wrap;">
       <label for="roomIdInput" id="roomIdLabel" style="font-weight:600;color:#fff;">Room ID:</label>
   <input id="roomIdInput" type="text" maxlength="3" pattern="[A-Z]{3}" style="width:60px;text-transform:uppercase;font-size:1.1em;padding:4px 8px;border-radius:6px;border:1px solid #333;background:#222;color:#fff;text-align:center" value="" autocomplete="off" />
       <button id="setRoomBtn" style="padding:4px 10px;border-radius:6px;background:#1f6feb;color:#fff;font-weight:600">Set</button>
@@ -248,6 +248,33 @@ function getPlayerCount() {
 let ROOM_ID = getRoomId();
 let PLAYER_COUNT = getPlayerCount();
 
+// Apply a new player count coming from room metadata and update UI
+function applyPlayerCount(countFromRoom){
+  const n = parseInt(countFromRoom, 10);
+  if (!(n >= 2 && n <= 8)) return;
+  if (n === PLAYER_COUNT) return;
+  PLAYER_COUNT = n;
+
+  // Update URL param so refreshes stay in sync
+  try {
+    const newUrl = new URL(window.location);
+    newUrl.searchParams.set('players', PLAYER_COUNT);
+    window.history.replaceState({}, '', newUrl);
+  } catch (e) { /* best-effort */ }
+
+  updateVisibleRoles();
+
+  // If the current role is now hidden, release it
+  const allRoles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  const idx = allRoles.indexOf(role);
+  if (idx >= PLAYER_COUNT) {
+    try { releaseMyClaim(); } catch (e) {}
+    role = null;
+    pendingLocalRole = null;
+    applyRoleColor(null);
+  }
+}
+
 // Hide role buttons based on player count
 function updateVisibleRoles() {
   const allRoles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
@@ -301,18 +328,31 @@ if (setRoomBtn) {
       // clear any known claims from previous room
       claimedRoles.clear();
       pendingLocalRole = null;
-
+      
       ROOM_ID = val;
       roomIdInput.value = ROOM_ID;
+      
+      // Reset player count to default when switching rooms - we'll discover the real count from room-meta
+      PLAYER_COUNT = 2;
+      
+      // Update URL to reflect new room and remove stale players param
+      const newUrl = new URL(window.location);
+      newUrl.searchParams.set('room', ROOM_ID);
+      newUrl.searchParams.delete('players');
+      window.history.replaceState({}, '', newUrl);
+      
+      // Reset visible roles to default before we learn the room's actual count
+      updateVisibleRoles();
+      
       statusEl.textContent = `Room set to ${ROOM_ID} — connecting...`;
 
       // restart streaming / websocket for the new room
       try { startStreaming(); } catch (e) { log('startStreaming failed: ' + e); }
-  // keep button disabled until further changes
-  setRoomBtn.disabled = true;
-  setRoomBtn.setAttribute('aria-disabled', 'true');
-  setRoomBtn.style.opacity = '0.35';
-  setRoomBtn.style.filter = 'grayscale(80%)';
+      // keep button disabled until further changes
+      setRoomBtn.disabled = true;
+      setRoomBtn.setAttribute('aria-disabled', 'true');
+      setRoomBtn.style.opacity = '0.35';
+      setRoomBtn.style.filter = 'grayscale(80%)';
     } else {
       statusEl.textContent = 'Room ID must be 3 letters';
     }
@@ -350,6 +390,10 @@ function openSocket() {
     statusEl.textContent = `Streaming — Room ${ROOM_ID}`;
     // ask existing clients to announce their claims so we sync
     try { socket.send(JSON.stringify({ type: 'request-claims', t: Date.now() })); } catch (e) {}
+
+    // Ask for current room meta (player count) and also announce what we think it is
+    try { socket.send(JSON.stringify({ type: 'request-meta', t: Date.now() })); } catch (e) {}
+    try { socket.send(JSON.stringify({ type: 'room-meta', playerCount: PLAYER_COUNT, t: Date.now() })); } catch (e) {}
 
     // Wait briefly for incoming claim announcements, then reconcile any pending local selection
     setTimeout(() => {
@@ -393,6 +437,13 @@ function openSocket() {
       } else if (data.type === 'request-claims') {
         // another client wants current claims; reply with our claim
         if (role) sendClaim(role, 'claim');
+      } else if (data.type === 'room-meta') {
+        if (data.playerCount !== undefined) {
+          applyPlayerCount(data.playerCount);
+        }
+      } else if (data.type === 'request-meta') {
+        // Another peer (or server) is asking for room meta; reply with our current count
+        try { socket.send(JSON.stringify({ type: 'room-meta', playerCount: PLAYER_COUNT, t: Date.now() })); } catch (e) {}
       }
     } catch (err) {
       // ignore non-json or malformed messages
@@ -486,7 +537,7 @@ function applyRoleColor(r) {
 
 // Always show all 8 color buttons, no player count selector needed
 const rolesContainer = document.querySelector('.roles');
-if(rolesContainer) rolesContainer.style.setProperty('--cols', '8');
+if(rolesContainer) rolesContainer.style.setProperty('--cols', Math.min(4, PLAYER_COUNT).toString());
 
 // keep latest deviceorientation around so we can include it with motion payloads
 window.addEventListener('deviceorientation', (ev) => {
