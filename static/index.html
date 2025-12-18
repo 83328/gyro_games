@@ -72,7 +72,15 @@
     for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
     return code;
   }
-  const roomCode = randomRoomCode();
+
+  // Persist room code in sessionStorage so back navigation keeps it.
+  // On an explicit reload we allow generating a fresh code.
+  const nav = performance.getEntriesByType('navigation')[0];
+  const isReload = nav && nav.type === 'reload';
+  let stored = null;
+  try { stored = sessionStorage.getItem('roomCode'); } catch (e) { stored = null; }
+  let roomCode = stored && !isReload ? stored : randomRoomCode();
+  try { sessionStorage.setItem('roomCode', roomCode); } catch (e) {}
   // Show room code in the page
   document.addEventListener('DOMContentLoaded', function() {
     const roomIdDisplay = document.getElementById('roomIdDisplay');
