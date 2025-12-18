@@ -21,11 +21,23 @@
   </style>
 </head>
 <body>
-  <!-- Room ID display -->
+  <!-- Room ID and Player Count display -->
   <div class="card" style="text-align:center; margin-bottom:10px;">
-    <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
       <div style="font-size:18px; font-weight:600; color:#ffd86b; letter-spacing:2px;">Room ID: <span id="roomIdDisplay"></span></div>
-      <a id="addControllerBtn" class="btn secondary" style="padding:6px 14px;font-size:13px;margin:0 0 0 8px;" href="#">Add Controller</a>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label for="playerCount" style="font-size:14px;color:#a8b4d6;">Players:</label>
+        <select id="playerCount" style="padding:4px 8px;border-radius:4px;background:#1f1f1f;color:#fff;border:1px solid #333;">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+        </select>
+      </div>
+      <a id="addControllerBtn" class="btn secondary" style="padding:6px 14px;font-size:13px;margin:0;" href="#">Add Controller</a>
     </div>
   </div>
   <div class="card" style="text-align:center">
@@ -70,28 +82,40 @@
   const qrImg = document.getElementById('qrImg');
   const copyBtn = document.getElementById('copyLink');
   const addControllerBtn = document.getElementById('addControllerBtn');
+  const playerCountSelect = document.getElementById('playerCount');
 
-  // Build a URL to the streaming page with ?room=ROOMCODE
+  // Build a URL to the streaming page with ?room=ROOMCODE&players=N
   function buildUrl(){
-  return `${location.protocol}//${location.host}/gyro.html?room=${roomCode}`;
+    const players = playerCountSelect.value;
+    return `https://games.arthurlimpens.com/gyro.html?room=${roomCode}&players=${players}`;
   }
   function updateGameLinks() {
+    const players = playerCountSelect.value;
     const links = document.querySelectorAll('.thumb-grid a');
     links.forEach(link => {
       const url = new URL(link.getAttribute('href'), location.origin);
       url.searchParams.set('room', roomCode);
+      url.searchParams.set('players', players);
       link.setAttribute('href', url.pathname + url.search);
     });
   }
+  
+  // Update links when player count changes
+  playerCountSelect.addEventListener('change', () => {
+    updateGameLinks();
+    updateQr();
+  });
+  
   updateGameLinks();
   function updateQr(){
-  const u = buildUrl();
-  // api.qrserver.com generates a PNG for free and supports size param
-  const src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(u)}`;
-  qrImg.src = src;
-  qrImg.title = u;
-  // Update Add Controller button link
-  if (addControllerBtn) addControllerBtn.setAttribute('href', `/gyro.html?room=${roomCode}`);
+    const u = buildUrl();
+    // api.qrserver.com generates a PNG for free and supports size param
+    const src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(u)}`;
+    qrImg.src = src;
+    qrImg.title = u;
+    // Update Add Controller button link
+    const players = playerCountSelect.value;
+    if (addControllerBtn) addControllerBtn.setAttribute('href', `/gyro.html?room=${roomCode}&players=${players}`);
   }
   // Removed useRoot checkbox
   copyBtn.addEventListener('click', ()=>{ navigator.clipboard?.writeText(buildUrl()).then(()=>{ copyBtn.textContent='Copied'; setTimeout(()=>copyBtn.textContent='Copy link',1200); }); });

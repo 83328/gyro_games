@@ -1,7 +1,0 @@
-tunnel: ${CLOUDFLARED_TUNNEL_ID}
-credentials-file: ${CLOUDFLARED_CREDENTIALS_FILE}
-
-ingress:
-  - hostname: games.arthurlimpens.com
-    service: http://0.0.0.0:8080
-  - service: http_status:404

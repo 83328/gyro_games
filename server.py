@@ -232,24 +232,23 @@ def create_app(static_dir: str):
 
     # Add API endpoint to serve token (MUST be before static route!)
     async def token_handler(request):
+        # 1. Get the host (e.g. 'games.arthurlimpens.com' or 'localhost:8080')
         host_header = request.headers.get('Host', request.host)
-        client_ip = request.headers.get('X-Forwarded-For', request.remote)
-        if isinstance(client_ip, str):
-            client_ip = client_ip.split(',')[0].strip()
         
-        # Check if request came through Cloudflare tunnel domain
-        is_tunnel_domain = 'arthurlimpens.com' in host_header.lower()
+        # 2. Check if we are behind the Cloudflare Tunnel (HTTPS)
+        # Cloudflare sends 'https' in the X-Forwarded-Proto header.
+        is_secure = request.headers.get('X-Forwarded-Proto') == 'https'
         
-        if is_tunnel_domain:
-            # Request came through Cloudflare tunnel - always use wss:// (secure WebSocket)
-            ws_url = f'wss://{host_header}/ws'
-            print(f"[Token API] Tunnel domain: {host_header} → {ws_url}")
+        # 3. Use wss:// for Cloudflare, ws:// for local/unsecured
+        protocol = 'wss' if is_secure else 'ws'
+        
+        # 4. Fallback to env variable if you decide to hardcode it later
+        if WS_URL:
+            ws_url = WS_URL
         else:
-            # Direct access to local IP - use protocol from request
-            proto = 'wss' if request.secure else 'ws'
-            ws_url = f'{proto}://{host_header}/ws'
-            print(f"[Token API] Direct access: {host_header} (secure={request.secure}) → {ws_url}")
-        
+            ws_url = f'{protocol}://{host_header}/ws'
+
+        print(f"[Token API] Protocol: {protocol} | Host: {host_header} → {ws_url}")
         return web.json_response({'token': AUTH_TOKEN, 'ws_url': ws_url})
     app.router.add_get('/api/token', token_handler)
 
@@ -260,7 +259,7 @@ def create_app(static_dir: str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--host', default='0.0.0.0')
+    parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--static', default='static')
     args = parser.parse_args()

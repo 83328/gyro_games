@@ -14,16 +14,6 @@
 <body>
   <h1>Maze Runner</h1>
   <div id="scores" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-    <span>Players:</span>
-    <select id="playerCount" style="margin:0 8px">
-      <option value="2">2 players</option>
-      <option value="3">3 players</option>
-      <option value="4">4 players</option>
-      <option value="5">5 players</option>
-      <option value="6">6 players</option>
-      <option value="7">7 players</option>
-      <option value="8">8 players</option>
-    </select>
     <span>Blue: <span id="sBlue">0</span></span> — <span>Red: <span id="sRed">0</span></span>
       <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
       <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
@@ -595,8 +585,15 @@ resizeCanvasToDisplay();
 players.blue.px = (0+0.5)*cell.w; players.blue.py = (ROWS-1+0.5)*cell.h;
 players.red.px = (COLS-1+0.5)*cell.w; players.red.py = (0+0.5)*cell.h;
 
-// player count selector handling
-const playerCount = document.getElementById('playerCount');
+// Player count from URL (no local selector)
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const count = parseInt(params.get('players'), 10);
+  if (count >= 2 && count <= 8) return count;
+  return 2;
+}
+const playerCount = getPlayerCountFromUrl();
+
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const orangeScoreContainer = document.getElementById('orangeScoreContainer');
@@ -604,7 +601,7 @@ const purpleScoreContainer = document.getElementById('purpleScoreContainer');
 const cyanScoreContainer = document.getElementById('cyanScoreContainer');
 const magentaScoreContainer = document.getElementById('magentaScoreContainer');
 function updateActiveRoles(){
-  const n = parseInt(playerCount.value, 10) || 2;
+  const n = playerCount;
   const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
   activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
   yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
@@ -629,7 +626,6 @@ function updateActiveRoles(){
   // reset positions for new roles
   resetRound();
 }
-playerCount.addEventListener('change', updateActiveRoles);
 // apply initial value
 updateActiveRoles();
 

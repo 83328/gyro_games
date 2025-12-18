@@ -237,7 +237,33 @@ function getRoomId() {
   for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
+
+function getPlayerCount() {
+  const params = new URLSearchParams(window.location.search);
+  const count = parseInt(params.get('players'), 10);
+  if (count >= 2 && count <= 8) return count;
+  return 2;
+}
+
 let ROOM_ID = getRoomId();
+let PLAYER_COUNT = getPlayerCount();
+
+// Hide role buttons based on player count
+function updateVisibleRoles() {
+  const allRoles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  const visible = allRoles.slice(0, PLAYER_COUNT);
+  allRoles.forEach((roleName, idx) => {
+    const btn = document.querySelector(`button[data-role="${roleName}"]`);
+    if (!btn) return;
+    btn.style.display = idx < PLAYER_COUNT ? '' : 'none';
+  });
+  const rolesContainer = document.querySelector('.roles');
+  if (rolesContainer) {
+    rolesContainer.style.setProperty('--cols', Math.min(4, PLAYER_COUNT));
+  }
+}
+
+updateVisibleRoles();
 
 // Room ID input logic
 const roomIdInput = document.getElementById('roomIdInput');
