@@ -89,46 +89,91 @@ let players = {};
 let bullets = [];
 let timeLeft = 60;
 let roundRunning = true;
+let intermissionTimer = null; // auto-restart timer handle
+let intermissionLeft = 0; // seconds until next round
 // powerup state
-let powerup = null; // {x,y,kind,ttl}
+let powerup = null; // {x,y,kind:'rapid'|'shield'|'speed'}
 const POWERUP_SPAWN_INTERVAL = 8.0; // seconds between spawn attempts
 let _powerupTimer = 4.0; // seed first spawn shortly
 
-let blackhole = {x:canvas.width/2, y:canvas.height/2, radius:40, gravity:800};
-let GALAXY_RADIUS = 280; // boundary (will be recalculated on resize)
+// Square playfield without blackhole; ships move within rectangular bounds
+let CENTER_X = canvas.width/2, CENTER_Y = canvas.height/2;
+let SPAWN_RADIUS = Math.floor(Math.min(canvas.width, canvas.height) * 0.42);
 // visual scaling: ship size and layout should adapt to canvas size
 let SHIP_SCALE = 2.0;
+// movement & gameplay constants
+const MAX_SPEED_BASE = 320; // px/s at SHIP_SCALE=1 on width~700
+const INVULN_DURATION = 2.0; // seconds of spawn protection
+const HIT_FLASH_DURATION = 0.15; // seconds
+const BULLET_MAX_BOUNCES = 2;
 
 function resizeCanvasToDisplay(){
   const headerH = (document.querySelector('h1')?.offsetHeight || 40) + (document.getElementById('info')?.offsetHeight || 30) + (document.getElementById('scores')?.offsetHeight || 30) + 36;
   const vv = window.visualViewport;
   const availW = Math.max(320, (vv?.width || window.innerWidth) - 24);
   const availH = Math.max(300, (vv?.height || window.innerHeight) - headerH - 24);
-  // keep a square canvas that fits available area
-  const size = Math.max(300, Math.min(availW, availH));
-  canvas.width = Math.min(1100, size);
-  canvas.height = canvas.width; // square playfield
-  // center blackhole and compute galaxy radius relative to size
-  blackhole.x = canvas.width/2; blackhole.y = canvas.height/2;
-  GALAXY_RADIUS = Math.floor(Math.min(canvas.width, canvas.height) * 0.42);
-  blackhole.radius = Math.max(16, Math.floor(Math.min(canvas.width, canvas.height) * 0.06));
-  // scale gravity slightly with size so feel is preserved
-  blackhole.gravity = 800 * (GALAXY_RADIUS / 280);
+  // rectangular canvas similar to blob: fill available space within caps
+  const W = Math.max(400, Math.min(1400, Math.floor(availW)));
+  const H = Math.max(300, Math.min(1000, Math.floor(availH)));
+  canvas.width = W;
+  canvas.height = H;
+  // update center and spawn radius relative to min dimension
+  CENTER_X = canvas.width/2; CENTER_Y = canvas.height/2;
+  SPAWN_RADIUS = Math.floor(Math.min(canvas.width, canvas.height) * 0.36);
   // ship scale relative to the original 700 baseline; double the visual size
   SHIP_SCALE = (canvas.width / 700) * 2.0;
-  // reposition players around the blackhole if they already exist
-  const spawnR = Math.floor(GALAXY_RADIUS * 0.72);
+  // reposition players around center if they already exist, preserve angle
   for(const role of Object.keys(players)){
     const p = players[role];
-    // keep angle but reposition at same relative radius
-    p.x = blackhole.x + Math.cos(p.angle - Math.PI/2) * spawnR;
-    p.y = blackhole.y + Math.sin(p.angle - Math.PI/2) * spawnR;
+    p.x = CENTER_X + Math.cos(p.angle - Math.PI/2) * SPAWN_RADIUS;
+    p.y = CENTER_Y + Math.sin(p.angle - Math.PI/2) * SPAWN_RADIUS;
   }
 }
 
 // listen to viewport/resize
 if(window.visualViewport){ window.visualViewport.addEventListener('resize', resizeCanvasToDisplay); window.visualViewport.addEventListener('scroll', resizeCanvasToDisplay); }
 window.addEventListener('resize', resizeCanvasToDisplay);
+// apply initial sizing immediately
+resizeCanvasToDisplay();
+
+// Winner splash overlay (similar to paint)
+const winOverlay = document.createElement('div');
+winOverlay.style.position = 'fixed';
+winOverlay.style.left = '0';
+winOverlay.style.top = '0';
+winOverlay.style.width = '100%';
+winOverlay.style.height = '100%';
+winOverlay.style.display = 'none';
+winOverlay.style.alignItems = 'center';
+winOverlay.style.justifyContent = 'center';
+winOverlay.style.zIndex = 10001;
+winOverlay.style.color = '#001';
+winOverlay.style.fontFamily = 'Arial, Helvetica, sans-serif';
+winOverlay.style.fontSize = '52px';
+winOverlay.style.fontWeight = '800';
+winOverlay.style.pointerEvents = 'none';
+winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
+document.body.appendChild(winOverlay);
+
+function showWinnerSplash(role, opts={}){
+  const bg = opts.background || colors[role] || '#000';
+  winOverlay.style.background = bg;
+  // pick readable text color based on luminance unless overridden
+  let hex = (bg.replace('#',''));
+  let r=0,g=0,b=0;
+  try{ r = parseInt(hex.substring(0,2),16); g = parseInt(hex.substring(2,4),16); b = parseInt(hex.substring(4,6),16); }catch(e){}
+  const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+  winOverlay.style.color = opts.textColor || ((lum > 170) ? '#001' : '#fff');
+  const base = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Winner';
+  const label = opts.label || `${base} wins!`;
+  winOverlay.textContent = label;
+  winOverlay.style.display = 'flex';
+  if(winOverlay._hideTimeout){ clearTimeout(winOverlay._hideTimeout); }
+  const duration = opts.duration || 3000;
+  winOverlay._hideTimeout = setTimeout(()=>{ winOverlay.style.display = 'none'; }, duration);
+}
+// expose helper for future winner triggers
+window.__showWinnerSplash = showWinnerSplash;
 
 // init players
 function initPlayers(){
@@ -139,20 +184,25 @@ function initPlayers(){
   players={};
   bullets=[];
   const angleStep = (Math.PI*2)/n;
-  const spawnR = Math.floor(GALAXY_RADIUS * 0.72);
+  const spawnR = SPAWN_RADIUS;
   for(let i=0;i<n;i++){
     const role = activeRoles[i];
     const angle = i*angleStep;
     players[role] = {
-      x: blackhole.x + Math.cos(angle)*spawnR,
-      y: blackhole.y + Math.sin(angle)*spawnR,
+      x: CENTER_X + Math.cos(angle)*spawnR,
+      y: CENTER_Y + Math.sin(angle)*spawnR,
       vx: 0, vy: 0,
       angle: angle + Math.PI/2,
       rotSpeed: 0,
       thrust: 0,
       cooldown: 0,
       fireMultiplier: 1,
-      powerupUntil: 0
+      powerupUntil: 0,
+      shieldUntil: 0,
+      speedUntil: 0,
+      invulUntil: performance.now()/1000 + INVULN_DURATION,
+      hitFlashUntil: 0,
+      lastFireInterval: 1.0
     };
   }
   timeLeft = 60;
@@ -193,29 +243,22 @@ function resetGame(reason){
     const sp = scoreSpans[k]; if(sp) sp.textContent = 0;
   }
   if(newRoundBtn) newRoundBtn.style.display='none';
+  if(winOverlay){
+    winOverlay.style.display='none';
+    if(winOverlay._hideTimeout) clearTimeout(winOverlay._hideTimeout);
+  }
   if(reason) appendLog(reason);
+  if(intermissionTimer){ clearInterval(intermissionTimer); intermissionTimer = null; }
   initPlayers();
 }
 
 // draw
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // galaxy boundary
-  ctx.strokeStyle='rgba(255,255,255,0.1)';
-  ctx.beginPath();
-  ctx.arc(blackhole.x,blackhole.y,GALAXY_RADIUS,0,Math.PI*2);
-  ctx.stroke();
-
-  // blackhole core
-  const grad = ctx.createRadialGradient(blackhole.x,blackhole.y,0,blackhole.x,blackhole.y,blackhole.radius*3);
-  grad.addColorStop(0,'#000');
-  grad.addColorStop(0.4,'#222');
-  grad.addColorStop(1,'#000');
-  ctx.fillStyle=grad;
-  ctx.beginPath();
-  ctx.arc(blackhole.x,blackhole.y,blackhole.radius,0,Math.PI*2);
-  ctx.fill();
+  // optional subtle border to emphasize square arena
+  ctx.strokeStyle='rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1,1,canvas.width-2,canvas.height-2);
 
   // bullets
   for(const b of bullets){
@@ -230,12 +273,15 @@ function draw(){
   if(powerup){
     ctx.save();
     ctx.beginPath();
-    ctx.fillStyle = '#ffe066';
+    // color/icon by kind
+    const pcol = powerup.kind==='shield' ? '#7fd3ff' : powerup.kind==='speed' ? '#8fff9c' : '#ffe066';
+    ctx.fillStyle = pcol;
     ctx.arc(powerup.x, powerup.y, 10, 0, Math.PI*2);
     ctx.fill();
     ctx.strokeStyle='#fff'; ctx.stroke();
     ctx.fillStyle='#001'; ctx.font='12px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('x2', powerup.x, powerup.y);
+    const label = powerup.kind==='shield' ? 'SH' : powerup.kind==='speed' ? 'SPD' : 'x2';
+    ctx.fillText(label, powerup.x, powerup.y);
     ctx.restore();
   }
 
@@ -246,14 +292,28 @@ function draw(){
     ctx.translate(p.x,p.y);
     ctx.rotate(p.angle);
     ctx.fillStyle=colors[role];
-    // ship shape scaled by SHIP_SCALE
-    const s = Math.max(1, Math.floor(8 * SHIP_SCALE));
+    // ship shape scaled by SHIP_SCALE (1/3 smaller)
+    const s = Math.max(1, Math.floor(8 * SHIP_SCALE * (2/3)));
     ctx.beginPath();
     ctx.moveTo(0,-(s+2));
     ctx.lineTo(s, s+2);
     ctx.lineTo(-s, s+2);
     ctx.closePath();
     ctx.fill();
+    // hit flash overlay
+    const nowSec = performance.now()/1000;
+    if(p.hitFlashUntil && p.hitFlashUntil > nowSec){
+      ctx.fillStyle='rgba(255,255,255,0.8)';
+      ctx.fill();
+    }
+    // shield outline when active (circular indicator)
+    if(p.shieldUntil && p.shieldUntil > nowSec){
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(100,200,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(0,0, Math.max(12, Math.floor(14*SHIP_SCALE)), 0, Math.PI*2);
+      ctx.stroke();
+    }
     if(p.thrust>0){
       ctx.fillStyle='orange';
       ctx.beginPath();
@@ -264,11 +324,14 @@ function draw(){
       ctx.fill();
     }
     ctx.restore();
+
+    // cooldown arc removed per request
   }
 
   ctx.fillStyle='#fff';
   ctx.font='14px monospace';
-  ctx.fillText(`Time left: ${Math.ceil(timeLeft)}s`,10,20);
+  const timerText = intermissionTimer ? `Next round in ${Math.max(0, Math.ceil(intermissionLeft))}s` : `Time left: ${Math.ceil(timeLeft)}s`;
+  ctx.fillText(timerText,10,20);
   // overlay final message if needed
   drawGameMessage();
 }
@@ -287,12 +350,33 @@ function step(dt){
       if(sc > maxScore){ maxScore = sc; winners.length=0; winners.push(r); }
       else if(sc === maxScore) winners.push(r);
     }
-    if(maxScore <= 0){ gameMessage = "Time's up! No score."; }
-    else if(winners.length===1){ gameMessage = `Time's up! Winner: ${winners[0].toUpperCase()} (${maxScore})`; }
-    else { gameMessage = `Time's up! Tie: ${winners.map(w=>w.toUpperCase()).join(', ')} (${maxScore})`; }
-  appendLog(gameMessage);
-    // show New round button to allow manual restart
-    if(newRoundBtn) newRoundBtn.style.display='';
+    if(maxScore <= 0){
+      gameMessage = "Time's up! No score.";
+      showWinnerSplash(null, { label: 'No score', background:'#e6e6e6', textColor:'#111', duration:2200 });
+    }
+    else if(winners.length===1){
+      const winner = winners[0];
+      const label = `${winner.charAt(0).toUpperCase() + winner.slice(1)} wins!`;
+      gameMessage = `Time's up! Winner: ${winner.toUpperCase()} (${maxScore})`;
+      showWinnerSplash(winner, { label, duration:4000 });
+    }
+    else {
+      const tieLabel = `Tie: ${winners.map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(', ')}`;
+      gameMessage = `Time's up! Tie: ${winners.map(w=>w.toUpperCase()).join(', ')} (${maxScore})`;
+      showWinnerSplash(null, { label: tieLabel, background:'#f7f7f7', textColor:'#111', duration:4000 });
+    }
+    appendLog(gameMessage);
+    // Auto-restart in 5s with lightweight countdown (no extra UI controls)
+    if(newRoundBtn) newRoundBtn.style.display='none';
+    intermissionLeft = 5;
+    if(intermissionTimer) { clearInterval(intermissionTimer); intermissionTimer=null; }
+    intermissionTimer = setInterval(()=>{
+      intermissionLeft -= 1;
+      if(intermissionLeft <= 0){
+        clearInterval(intermissionTimer); intermissionTimer=null;
+        resetGame('Auto new round');
+      }
+    }, 1000);
   }
 
   // update players
@@ -308,40 +392,31 @@ function step(dt){
     p.vx += thrustX * dt;
     p.vy += thrustY * dt;
 
-    // gravity
-    const dx = blackhole.x - p.x;
-    const dy = blackhole.y - p.y;
-    const dist = Math.sqrt(dx*dx+dy*dy);
-    const pull = blackhole.gravity / (dist*dist);
-    p.vx += dx/dist * pull * dt;
-    p.vy += dy/dist * pull * dt;
-
     // move
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-
-    // limit to galaxy boundary
-    const cx = p.x - blackhole.x;
-    const cy = p.y - blackhole.y;
-    const distFromCenter = Math.sqrt(cx*cx+cy*cy);
-    if(distFromCenter > GALAXY_RADIUS){
-      const nx = cx/distFromCenter;
-      const ny = cy/distFromCenter;
-      p.x = blackhole.x + nx * GALAXY_RADIUS;
-      p.y = blackhole.y + ny * GALAXY_RADIUS;
-      // bounce back slightly
-      const dot = p.vx*nx + p.vy*ny;
-      p.vx -= 1.2*dot*nx;
-      p.vy -= 1.2*dot*ny;
-    }
+    // limit to rectangular arena with bounce
+    const pad = Math.max(8, Math.floor(10 * SHIP_SCALE));
+    const minX = pad, maxX = canvas.width - pad;
+    const minY = pad, maxY = canvas.height - pad;
+    if(p.x < minX){ p.x = minX; p.vx = Math.abs(p.vx) * 0.6; }
+    if(p.x > maxX){ p.x = maxX; p.vx = -Math.abs(p.vx) * 0.6; }
+    if(p.y < minY){ p.y = minY; p.vy = Math.abs(p.vy) * 0.6; }
+    if(p.y > maxY){ p.y = maxY; p.vy = -Math.abs(p.vy) * 0.6; }
 
     // friction
     p.vx *= 0.995; p.vy *= 0.995;
+
+    // clamp speed with optional speed powerup boost
+    const maxSpeed = (MAX_SPEED_BASE * (canvas.width/700)) * (p.speedUntil && (performance.now()/1000) < p.speedUntil ? 1.35 : 1.0);
+    const sp = Math.hypot(p.vx, p.vy);
+    if(sp > maxSpeed){ const k = maxSpeed / sp; p.vx *= k; p.vy *= k; }
 
     // shooting
       p.cooldown -= dt;
       const baseFireInterval = 1.0; // seconds between shots at normal rate
       const interval = baseFireInterval / (p.fireMultiplier || 1);
+      p.lastFireInterval = interval;
       if(p.cooldown<=0){
         bullets.push({
           x: p.x + Math.sin(p.angle)*12,
@@ -356,6 +431,10 @@ function step(dt){
       }
   }
 
+  // build spatial hash of players for bullet collision queries
+  const hash = makeSpatialHash(64);
+  for(const role of activeRoles){ const p = players[role]; if(p) hash.add({role, x:p.x, y:p.y}); }
+
   // update bullets
   for(let i=bullets.length-1;i>=0;i--){
     const b=bullets[i];
@@ -364,53 +443,74 @@ function step(dt){
     b.life -= dt;
     if(b.life<=0){bullets.splice(i,1);continue;}
 
-    // collisions
-    for(const role of activeRoles){
+    // despawn bullets at arena edges (no ricochet)
+    if(b.x <= 1 || b.x >= canvas.width-1 || b.y <= 1 || b.y >= canvas.height-1){ bullets.splice(i,1); continue; }
+
+    // collisions (skip owner and invulnerable/shielded targets)
+    const candidates = hash.queryNeighbors({x:b.x,y:b.y});
+    for(const cand of candidates){
+      const role = cand.role;
       if(role===b.owner) continue;
       const p=players[role];
+      const nowSec = performance.now()/1000;
+      if(!p) continue;
+      if(p.invulUntil && p.invulUntil > nowSec) continue;
+      const shieldActive = p.shieldUntil && p.shieldUntil > nowSec;
       const dx=b.x-p.x, dy=b.y-p.y;
         // scale hit radius with ship size
-        const hitR = Math.max(12, 12 * SHIP_SCALE); // px
+        // reduce hit radius to match smaller ships (2/3 size)
+        const hitR = Math.max(8, Math.floor(12 * SHIP_SCALE * (2/3))); // px
         if(dx*dx+dy*dy < (hitR * hitR)){
-        scores[b.owner]++;
-        const span = scoreSpans[b.owner]; if(span) span.textContent = scores[b.owner];
+        if(!shieldActive){
+          scores[b.owner]++;
+          const span = scoreSpans[b.owner]; if(span) span.textContent = scores[b.owner];
+        }
+        // hit feedback and knockback on target
+        p.hitFlashUntil = nowSec + HIT_FLASH_DURATION;
+        const knock = 60; // px/s impulse
+        const mag = Math.hypot(b.vx, b.vy) || 1;
+        p.vx += (b.vx/mag) * knock;
+        p.vy += (b.vy/mag) * knock;
         bullets.splice(i,1);
         break;
       }
     }
   }
 
-  // powerup timer: spawn occasionally
+  // powerup timer: spawn occasionally within rectangular arena
   if(powerup==null){
     _powerupTimer -= dt;
     if(_powerupTimer <= 0){
-      // spawn at random location within galaxy bounds but not too close to blackhole
-      const angle = Math.random()*Math.PI*2;
-      const r = 60 + Math.random()*(GALAXY_RADIUS-80);
-      const px = blackhole.x + Math.cos(angle)*r;
-      const py = blackhole.y + Math.sin(angle)*r;
-      powerup = { x: px, y: py, kind: 'rapid', ttl: 12.0 };
+      // spawn at random location within arena bounds with margin
+      const margin = 40;
+      const px = margin + Math.random() * (canvas.width - margin*2);
+      const py = margin + Math.random() * (canvas.height - margin*2);
+      // choose powerup kind
+      const kinds = ['rapid','shield','speed'];
+      const kind = kinds[Math.floor(Math.random()*kinds.length)];
+      powerup = { x: px, y: py, kind };
       // reset spawn timer
       _powerupTimer = POWERUP_SPAWN_INTERVAL + Math.random()*6;
     }
   } else {
-    // powerup active TTL
-    powerup.ttl -= dt;
-    if(powerup.ttl <= 0) powerup = null;
-    else {
-      // check pickup by players
-      for(const role of activeRoles){
-        const p = players[role];
-        const dx = p.x - powerup.x, dy = p.y - powerup.y;
-  const pickupR = Math.max(20, 30 * SHIP_SCALE);
-  if(dx*dx+dy*dy < (pickupR * pickupR)){
-          // apply rapid fire for 5s
+    // no expiry: wait until picked up
+    for(const role of activeRoles){
+      const p = players[role];
+      const dx = p.x - powerup.x, dy = p.y - powerup.y;
+      const pickupR = Math.max(20, 30 * SHIP_SCALE);
+      if(dx*dx+dy*dy < (pickupR * pickupR)){
+        const nowSec = performance.now()/1000;
+        if(powerup.kind === 'rapid'){
           p.fireMultiplier = 2;
-          p.powerupUntil = performance.now()/1000 + 5.0;
-          powerup = null;
-          appendLog(`${role} picked up Rapid Fire!`);
-          break;
+          p.powerupUntil = nowSec + 5.0;
+        } else if(powerup.kind === 'shield'){
+          p.shieldUntil = nowSec + 6.0;
+        } else if(powerup.kind === 'speed'){
+          p.speedUntil = nowSec + 6.0;
         }
+        powerup = null;
+        appendLog(`${role} picked up Rapid Fire!`);
+        break;
       }
     }
   }
@@ -438,13 +538,49 @@ function handleTilt(role,beta,gamma){
   const p=players[role]; if(!p||!roundRunning)return;
 
   // Forward/back (beta) = thrust
-  const thrustVal = Math.max(0, Math.min(1, (-beta)/35));
+  // invert: tilting up increases thrust
+  // apply deadzone and cubic easing for precision
+  const DEAD = 4; // degrees
+  let t = (Math.abs(beta) < DEAD) ? 0 : (beta / 35);
+  t = Math.max(0, Math.min(1, t));
+  const thrustVal = t * t * t; // cubic ease-in
   p.thrust = thrustVal;
 
   // Left/right (gamma) = rotation speed
   // make rotation less sensitive: divide gamma by a larger factor
   const rotVal = Math.max(-1, Math.min(1, gamma/70));
-  p.rotSpeed = rotVal * 2.2; // radians per sec (slower)
+  // reduce turning at high thrust for better control
+  const turnScale = 1 - 0.4 * p.thrust; // 60% at max thrust
+  p.rotSpeed = rotVal * 2.2 * turnScale; // radians per sec
+}
+
+// simple spatial hash for players to speed up bullet collision checks
+function makeSpatialHash(cellSize){
+  return {
+    cellSize,
+    map: new Map(),
+    clear(){ this.map.clear(); },
+    key(x,y){ return `${x},${y}`; },
+    add(obj){
+      const cx = Math.floor(obj.x / this.cellSize);
+      const cy = Math.floor(obj.y / this.cellSize);
+      const k = `${cx},${cy}`;
+      if(!this.map.has(k)) this.map.set(k, []);
+      this.map.get(k).push(obj);
+    },
+    queryNeighbors(obj){
+      const cx = Math.floor(obj.x / this.cellSize);
+      const cy = Math.floor(obj.y / this.cellSize);
+      let neighbors = [];
+      for(let dx=-1; dx<=1; dx++){
+        for(let dy=-1; dy<=1; dy++){
+          const k = `${cx+dx},${cy+dy}`;
+          if(this.map.has(k)) neighbors = neighbors.concat(this.map.get(k));
+        }
+      }
+      return neighbors;
+    }
+  };
 }
 
 // Room id extraction from URL
