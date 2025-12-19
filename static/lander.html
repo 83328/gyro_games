@@ -145,6 +145,8 @@ let players = {};
 let running = false; // whether physics/controls are active
 let _countdownTimer = null;
 let _intermissionTimer = null;
+// persistent scores across rounds
+let scores = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
 
 // Apply playerCount from room metadata and reinitialize game state
 function applyPlayerCountFromMeta(n){
@@ -195,7 +197,7 @@ function initPlayers(){
       tries++;
     } while (usedX.some(px => Math.abs(px - x) < 40) && tries < 20);
     usedX.push(x);
-    players[role] = { x: x, y: Math.max(60, H*0.12), vx:0, vy:0, angle:0, av:0, thrust:0, fuel:100, landed:false, crashed:false, score:0 };
+    players[role] = { x: x, y: Math.max(60, H*0.12), vx:0, vy:0, angle:0, av:0, thrust:0, fuel:100, landed:false, crashed:false, score:scores[role]||0 };
   }
   // ...existing code...
   // rebuild the per-role score containers in the scoresHolder
@@ -212,7 +214,8 @@ function initPlayers(){
       el.className = 'score';
       el.id = `${role}ScoreContainer`;
       el.style.color = roleColors[role] || '#fff';
-      el.innerHTML = `${role.charAt(0).toUpperCase()+role.slice(1)}: <span id="${role}Score">0</span>`;
+      const existingScore = scores[role] || 0;
+      el.innerHTML = `${role.charAt(0).toUpperCase()+role.slice(1)}: <span id="${role}Score">${existingScore}</span>`;
       scoresHolder.appendChild(el);
     }
   }
@@ -222,14 +225,20 @@ function initPlayers(){
 // input from websocket (per role): keep raw and smoothed values
 const inputs = { blue: {rawBeta:0, rawGamma:0, beta:0, gamma:0}, red:{rawBeta:0, rawGamma:0, beta:0, gamma:0} };
 
+function zeroInputsForActiveRoles(){
+  const roles = Object.keys(players);
+  for(const r of roles){
+    if(!inputs[r]) inputs[r] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
+    inputs[r].rawBeta = 0; inputs[r].rawGamma = 0; inputs[r].beta = 0; inputs[r].gamma = 0;
+  }
+}
+
 function resetRound(){
   if(_intermissionTimer){ clearInterval(_intermissionTimer); _intermissionTimer = null; }
   genGround();
   initPlayers();
   // clear any stale inputs for all roles
-  for(const r of Object.keys(players)){
-    if(inputs[r]){ inputs[r].rawBeta = 0; inputs[r].rawGamma = 0; inputs[r].beta = 0; inputs[r].gamma = 0; }
-  }
+  zeroInputsForActiveRoles();
   // begin a new round with countdown
   startCountdown();
 }
@@ -257,6 +266,7 @@ function startCountdown(){
 function beginRun(){
   // zero thrust and mark running true
   for(const r of Object.keys(players)){ if(players[r]) players[r].thrust = 0; }
+  zeroInputsForActiveRoles();
   running = true;
   if(_intermissionTimer){ clearInterval(_intermissionTimer); _intermissionTimer = null; }
 }
@@ -381,7 +391,7 @@ function step(dt){
 
   for(const role of Object.keys(players)){
     const p = players[role];
-    if(p.landed || p.crashed) { p.thrust = 0; continue; }
+      if(p.landed || p.crashed) { p.thrust = 0; continue; }
     // ensure inputs exist for this role
     if(!inputs[role]) inputs[role] = {rawBeta:0, rawGamma:0, beta:0, gamma:0};
     // smooth incoming raw inputs into working values
@@ -447,7 +457,8 @@ function step(dt){
         p.x = pads[padIndex].x;
         p.y = pads[padIndex].y - 16;
         p.vx = 0; p.vy = 0; p.av = 0;
-        p.score = (p.score || 0) + 1;
+          scores[role] = (scores[role] || 0) + 1;
+          p.score = scores[role];
         pads[padIndex].landed = true;
         pads[padIndex].landedBy = role;
         // update DOM score if present
