@@ -66,7 +66,7 @@ const AUTO_LEVEL_FACTOR = 1.6; // auto-level assist strength
 let W = canvas.width, H = canvas.height;
 let ground = [];
 let pads = [];
-// Resize canvas to fit available viewport while preserving aspect ratio
+// Resize canvas to fit available viewport while preserving aspect ratio (without resetting game state)
 const TARGET_ASPECT = 700/420; // original aspect
 function resizeCanvasToDisplay(){
   // reserve space for header and HUD
@@ -80,12 +80,26 @@ function resizeCanvasToDisplay(){
   let newH = Math.floor(newW / TARGET_ASPECT);
   // if width would be too small for height, swap
   if(newH > availH){ newH = availH; newW = Math.floor(newH * TARGET_ASPECT); }
-  canvas.width = Math.max(320, newW);
-  canvas.height = Math.max(240, newH);
+
+  const clampedW = Math.max(320, newW);
+  const clampedH = Math.max(240, newH);
+  const oldW = W || clampedW;
+  const oldH = H || clampedH;
+  const scaleX = clampedW / oldW;
+  const scaleY = clampedH / oldH;
+
+  canvas.width = clampedW;
+  canvas.height = clampedH;
   W = canvas.width; H = canvas.height;
-  // regenerate ground and reinitialize players/pads to match new size
-  genGround();
-  initPlayers();
+
+  // Scale existing world state to preserve in-progress rounds without regenerating
+  if(ground && ground.length){ for(const pt of ground){ pt.x *= scaleX; pt.y *= scaleY; } }
+  if(pads && pads.length){ for(const p of pads){ p.x *= scaleX; p.y *= scaleY; p.w *= scaleX; } }
+  for(const role of Object.keys(players)){
+    const pl = players[role];
+    if(!pl) continue;
+    pl.x *= scaleX; pl.y *= scaleY; pl.vx *= scaleX; pl.vy *= scaleY;
+  }
 }
 // Debounced resize helper to avoid thrashing when visualViewport fires many events
 let _resizeTimer = null;
@@ -130,6 +144,7 @@ let playerCount = getPlayerCountFromUrl();
 let players = {};
 let running = false; // whether physics/controls are active
 let _countdownTimer = null;
+let _intermissionTimer = null;
 
 // Apply playerCount from room metadata and reinitialize game state
 function applyPlayerCountFromMeta(n){
@@ -167,7 +182,7 @@ function initPlayers(){
   // Shuffle pad assignments
   let shuffledRoles = ROLE_ORDER.slice(0, n).sort(() => Math.random() - 0.5);
   for(let i=0;i<n;i++){
-    pads.push({ x: padPositions[i].x, y: padPositions[i].y, w: padW, role: shuffledRoles[i] });
+    pads.push({ x: padPositions[i].x, y: padPositions[i].y, w: padW, role: shuffledRoles[i], landed:false, landedBy:null });
   }
   // Assign each player to a random starting position (not always above a pad)
   let usedX = [];
@@ -208,6 +223,7 @@ function initPlayers(){
 const inputs = { blue: {rawBeta:0, rawGamma:0, beta:0, gamma:0}, red:{rawBeta:0, rawGamma:0, beta:0, gamma:0} };
 
 function resetRound(){
+  if(_intermissionTimer){ clearInterval(_intermissionTimer); _intermissionTimer = null; }
   genGround();
   initPlayers();
   // clear any stale inputs for all roles
@@ -242,11 +258,11 @@ function beginRun(){
   // zero thrust and mark running true
   for(const r of Object.keys(players)){ if(players[r]) players[r].thrust = 0; }
   running = true;
+  if(_intermissionTimer){ clearInterval(_intermissionTimer); _intermissionTimer = null; }
 }
 
 // initial layout
 resizeCanvasToDisplay();
-initPlayers();
 resetRound();
 
 // respond to window size changes
@@ -276,9 +292,17 @@ function drawPads(){
   for(const [i,p] of pads.entries()){
     // pad colored by role
     const color = p.role==='blue' ? '#4ea1ff' : p.role==='red' ? '#ff6b6b' : p.role==='yellow' ? '#ffd86b' : p.role==='green' ? '#8fe58f' : p.role==='orange' ? '#ff9f4d' : p.role==='purple' ? '#b58cff' : p.role==='cyan' ? '#4de6e6' : '#ff6bff';
-    ctx.fillStyle = color;
+    ctx.save();
+    if(p.landed){
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 18;
+    }
+    ctx.fillStyle = p.landed ? '#fff' : color;
     ctx.fillRect(p.x - p.w/2, p.y-6, p.w, 10);
-    ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x - p.w/2, p.y-6, p.w, 10);
+    ctx.strokeStyle = p.landed ? color : '#fff';
+    ctx.lineWidth = p.landed ? 3 : 1;
+    ctx.strokeRect(p.x - p.w/2, p.y-6, p.w, 10);
+    ctx.restore();
   }
 }
 
@@ -326,6 +350,28 @@ function drawHUD(){
     ctx.fillStyle = color; ctx.fillRect(W - fw - 10, fy, fw * (p.fuel/100), fh);
     fy += fh + 8;
   }
+}
+
+function allPlayersSettled(){
+  const keys = Object.keys(players);
+  if(!keys.length) return false;
+  return keys.every(r => players[r]?.landed || players[r]?.crashed);
+}
+
+function startIntermission(){
+  if(_intermissionTimer) return;
+  running = false;
+  let countdown = 3;
+  msg.textContent = `Round complete — restarting in ${countdown}`;
+  _intermissionTimer = setInterval(()=>{
+    countdown -= 1;
+    if(countdown > 0){
+      msg.textContent = `Round complete — restarting in ${countdown}`;
+    } else {
+      clearInterval(_intermissionTimer); _intermissionTimer = null;
+      resetRound();
+    }
+  }, 1000);
 }
 
 // physics and rules
@@ -402,6 +448,8 @@ function step(dt){
         p.y = pads[padIndex].y - 16;
         p.vx = 0; p.vy = 0; p.av = 0;
         p.score = (p.score || 0) + 1;
+        pads[padIndex].landed = true;
+        pads[padIndex].landedBy = role;
         // update DOM score if present
         const scoreEl = document.getElementById(`${role}Score`);
         if(scoreEl) scoreEl.textContent = p.score;
@@ -417,6 +465,10 @@ function step(dt){
     // keep in bounds
     p.x = Math.max(10, Math.min(W-10, p.x));
     p.y = Math.max(10, Math.min(H-10, p.y));
+  }
+
+  if(running && allPlayersSettled()){
+    startIntermission();
   }
 }
 
