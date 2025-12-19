@@ -169,6 +169,21 @@ function applyPlayerCountFromMeta(n){
   resetRace();
 }
 
+// show winner splash
+function showWinnerSplash(role){
+  const msg = document.getElementById('msg');
+  const msgMain = document.getElementById('msgMain');
+  const msgSub = document.getElementById('msgSub');
+  const msgInner = document.getElementById('msgInner');
+  msg.style.display = 'flex';
+  msg.style.background = colors[role] || '#4ea1ff';
+  msgInner.style.background = 'transparent';
+  msgInner.style.boxShadow = 'none';
+  msgMain.textContent = `${role.toUpperCase()} WINS!`;
+  msgSub.textContent = `Score: ${scores[role]}`;
+  setTimeout(()=>{ msg.style.display = 'none'; msg.style.background = ''; msgInner.style.background = 'rgba(0,0,0,0.6)'; msgInner.style.boxShadow = ''; }, 2500);
+}
+
 // countdown logic
 function startCountdown(){
   countdown = 3;
@@ -177,6 +192,8 @@ function startCountdown(){
   const msg = document.getElementById('msg');
   const msgMain = document.getElementById('msgMain');
   const msgSub = document.getElementById('msgSub');
+  const msgInner = document.getElementById('msgInner');
+  msgInner.style.background = 'rgba(0,0,0,0.6)';
   msg.style.display = 'flex';
   msgMain.textContent = countdown;
   msgSub.textContent = (document.getElementById('info') ? document.getElementById('info').textContent : `Room ${ROOM_ID}`);
@@ -228,8 +245,6 @@ function draw(){
     ctx.stroke();
 
   }
-
-  // (start line removed)
 }
 
 // handle gyroscope input
@@ -266,6 +281,7 @@ function step(dt){
   if(typeof sCyan !== 'undefined') sCyan.textContent = scores.cyan;
   if(typeof sMagenta !== 'undefined') sMagenta.textContent = scores.magenta;
   appendLog(`${role} wins the race!`);
+  showWinnerSplash(role);
       setTimeout(()=>resetRace(),3000);
     }
   }
@@ -276,13 +292,31 @@ function resetRace(){
   initPlayers();
 }
 
-// ensure unified room badge helper exists (in case file was edited earlier)
 (function(){
   let rb = document.getElementById('roomBadge');
   if(!rb){ rb = document.createElement('div'); rb.id='roomBadge'; rb.style.cssText='position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000'; document.body.appendChild(rb); }
   rb.textContent = `Room: ${ROOM_ID}`;
   window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
 })();
+
+// Fullscreen button
+const fsBtn = document.getElementById('fs');
+if(fsBtn){
+  fsBtn.addEventListener('click', ()=>{
+    const elem = document.documentElement;
+    if(!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement){
+      if(elem.requestFullscreen) elem.requestFullscreen();
+      else if(elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+      else if(elem.mozRequestFullScreen) elem.mozRequestFullScreen();
+      else if(elem.msRequestFullscreen) elem.msRequestFullscreen();
+    } else {
+      if(document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if(document.mozCancelFullScreen) document.mozCancelFullScreen();
+      else if(document.msExitFullscreen) document.msExitFullscreen();
+    }
+  });
+}
 
 // WebSocket setup
 fetch('/api/token').then(r=>r.json()).then(data=>{

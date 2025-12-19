@@ -29,6 +29,14 @@ binary_count = 0
 BINARY_LOG_EVERY = 50
 BINARY_LARGE_THRESHOLD = 512
 
+# Pre-encoded room-meta messages cache: {room_id: json_str}
+room_meta_cache = {}
+
+# Helper: safe global counter increment
+def increment_counter():
+    global binary_count
+    binary_count = (binary_count + 1) % 1000000  # Prevent overflow
+
 async def websocket_handler(request):
 
     # Basic token check: require ?token=...
@@ -83,21 +91,30 @@ async def websocket_handler(request):
                                 pc_int = int(pc)
                                 if 2 <= pc_int <= 8:
                                     room_meta[room_id] = { 'playerCount': pc_int }
+                                    # Update cached JSON to avoid re-serialization
+                                    room_meta_cache[room_id] = json.dumps({'type': 'room-meta', 'playerCount': pc_int})
                                 else:
                                     room_meta.setdefault(room_id, {})
+                                    room_meta_cache.pop(room_id, None)
                             except Exception:
                                 room_meta.setdefault(room_id, {})
+                                room_meta_cache.pop(room_id, None)
 
                             # Broadcast the meta to everyone in the room (including sender)
-                            meta_msg = json.dumps({'type': 'room-meta', **room_meta.get(room_id, {})})
-                            for client in list(rooms.get(room_id, [])):
+                            meta_msg = room_meta_cache.get(room_id, json.dumps({'type': 'room-meta'}))
+                            disconnected = []
+                            for client in rooms.get(room_id, set()):
                                 if client.closed:
-                                    rooms[room_id].discard(client)
+                                    disconnected.append(client)
                                     continue
                                 try:
                                     await client.send_str(meta_msg)
                                 except Exception as e:
-                                    print(f"[!] Failed to send room-meta to client {client}: {e}")
+                                    print(f"[!] Failed to send room-meta: {e}")
+                                    disconnected.append(client)
+                            # Clean up disconnected clients in batch
+                            for client in disconnected:
+                                rooms[room_id].discard(client)
                             handled = True
 
                         elif mtype == 'request-meta':
@@ -124,31 +141,31 @@ async def websocket_handler(request):
                     if handled:
                         continue
 
-                    if message_count % 125 == 0:
+                    if message_count % 1000 == 0:
                         print(f"[RX TEXT #{message_count}] from {peer} room={room_id}: {msg.data[:100]}...")
                     # Relay only to clients in the same room
-                    for client in list(rooms.get(room_id, [])):
+                    disconnected = []
+                    for client in rooms.get(room_id, set()):
                         if client.closed:
-                            rooms[room_id].discard(client)
+                            disconnected.append(client)
                             continue
                         try:
                             await client.send_str(msg.data)
                         except Exception as e:
-                            print(f"[!] Failed to send TEXT to client {client}: {e}")
+                            print(f"[!] Failed to send TEXT: {e}")
+                            disconnected.append(client)
+                    # Clean up disconnected clients in batch
+                    for client in disconnected:
+                        rooms[room_id].discard(client)
                 elif msg.type == web.WSMsgType.BINARY:
                     data = msg.data
-                    # throttled logging: increment counter and print only occasionally
-                    try:
-                        binary_count += 1
-                    except Exception:
-                        binary_count = 1
+                    increment_counter()
                     should_log = False
                     if len(data) > BINARY_LARGE_THRESHOLD:
                         should_log = True
                     elif (binary_count % BINARY_LOG_EVERY) == 0:
                         should_log = True
-                    # if this looks like a non-motion frame (unexpected type byte), log once in a while
-                    if len(data) >= 1 and data[0] != 1 and (binary_count % (BINARY_LOG_EVERY * 5) == 0):
+                    if should_log and len(data) >= 1 and data[0] != 1:
                         should_log = True
                     if should_log:
                         print(f"[RX BINARY] from {peer} room={room_id}: {len(data)} bytes (count={binary_count})")
@@ -159,8 +176,8 @@ async def websocket_handler(request):
                     # [1] uint8 role index (0..7)
                     # [2..5] uint32 timestamp (ms modulo 2^32)
                     # [6..] N float32 values (we expect 8: beta,gamma,orientA,orientB,orientG,ax,ay,az)
-                    try:
-                        if len(data) >= 6 and data[0] == 1:
+                    if len(data) >= 6 and data[0] == 1:
+                        try:
                             role_idx = data[1]
                             ts = int.from_bytes(data[2:6], 'little', signed=False)
                             payload = data[6:]
@@ -171,7 +188,7 @@ async def websocket_handler(request):
                                 try:
                                     floats = list(struct.unpack(fmt, payload))
                                 except struct.error:
-                                    floats = []
+                                    pass
                             # map role index to name when possible
                             roles = ['blue','red','yellow','green','orange','purple','cyan','magenta']
                             role_name = roles[role_idx] if (isinstance(role_idx, int) and 0 <= role_idx < len(roles)) else None
@@ -179,40 +196,31 @@ async def websocket_handler(request):
                                 'type': 'motion',
                                 'role': role_name,
                                 't': ts,
-                                'values': floats,
-                                'raw_len': len(data)
                             }
                             # Provide legacy-friendly keys so existing game clients
                             # that expect named fields (beta/gamma/orientBeta/etc.) continue to work.
-                            try:
-                                if len(floats) >= 1:
-                                    motion_msg['beta'] = floats[0]
-                                if len(floats) >= 2:
-                                    motion_msg['gamma'] = floats[1]
-                                if len(floats) >= 3:
-                                    motion_msg['orientAlpha'] = floats[2]
-                                if len(floats) >= 4:
-                                    motion_msg['orientBeta'] = floats[3]
-                                if len(floats) >= 5:
-                                    motion_msg['orientGamma'] = floats[4]
-                                if len(floats) >= 6:
-                                    motion_msg['ax'] = floats[5]
-                                if len(floats) >= 7:
-                                    motion_msg['ay'] = floats[6]
-                                if len(floats) >= 8:
-                                    motion_msg['az'] = floats[7]
-                            except Exception:
-                                # best-effort mapping; don't block relay on unexpected data
-                                pass
-                            # Store the decoded motion state for aggregation instead of immediate relay
+                            if len(floats) >= 1:
+                                motion_msg['beta'] = floats[0]
+                            if len(floats) >= 2:
+                                motion_msg['gamma'] = floats[1]
+                            if len(floats) >= 3:
+                                motion_msg['orientAlpha'] = floats[2]
+                            if len(floats) >= 4:
+                                motion_msg['orientBeta'] = floats[3]
+                            if len(floats) >= 5:
+                                motion_msg['orientGamma'] = floats[4]
+                            if len(floats) >= 6:
+                                motion_msg['ax'] = floats[5]
+                            if len(floats) >= 7:
+                                motion_msg['ay'] = floats[6]
+                            if len(floats) >= 8:
+                                motion_msg['az'] = floats[7]
+                            # Store the decoded motion state for aggregation
                             if room_id not in room_states:
                                 room_states[room_id] = {}
                             room_states[room_id][role_name] = motion_msg
-                            # No longer doing immediate relay - aggregation task will handle it
-                    except Exception as e:
-                        print(f"[!] Failed to decode binary motion frame: {e}")
-
-                    # REMOVED: No longer relaying raw binary to avoid double bandwidth
+                        except Exception as e:
+                            print(f"[!] Failed to decode binary motion frame: {e}")
                 elif msg.type == web.WSMsgType.ERROR:
                     print('WebSocket connection closed with exception %s' % ws.exception())
 #                else:
@@ -230,19 +238,24 @@ async def websocket_handler(request):
                 del room_states[room_id]
             if room_id in room_meta:
                 del room_meta[room_id]
+            if room_id in room_meta_cache:
+                del room_meta_cache[room_id]
 
     return ws
 
 async def broadcast_aggregated_state():
     """Background task that periodically broadcasts aggregated state to all rooms."""
+    # Cache for pre-serialized aggregated messages per room
+    serialized_cache = {}
+    
     while True:
         try:
             await asyncio.sleep(AGGREGATION_INTERVAL)
             
             # Iterate through all rooms
             for room_id in list(rooms.keys()):
-                clients = list(rooms.get(room_id, []))
-                if not clients:
+                clients_set = rooms.get(room_id)
+                if not clients_set or len(clients_set) == 0:
                     continue
                 
                 # Get current state for this room
@@ -250,7 +263,7 @@ async def broadcast_aggregated_state():
                 if not state:
                     continue
                 
-                # Create aggregated message with all player states and optional room meta
+                # Create aggregated message with all player states
                 aggregated_msg = {
                     'type': 'batch',
                     'players': list(state.values())
@@ -258,17 +271,28 @@ async def broadcast_aggregated_state():
                 if room_id in room_meta and isinstance(room_meta[room_id], dict):
                     aggregated_msg.update(room_meta[room_id])
                 
-                # Broadcast to all clients in this room
+                # Serialize once and broadcast to all clients in this room
                 text = json.dumps(aggregated_msg)
-                for client in clients:
+                
+                # Use gather for concurrent sends to avoid blocking on individual clients
+                disconnected = set()
+                tasks = []
+                for client in clients_set:
                     if client.closed:
-                        rooms[room_id].discard(client)
-                        continue
-                    try:
-                        await client.send_str(text)
-                    except Exception as e:
-                        print(f"[!] Failed to broadcast aggregated state: {e}")
-                        rooms[room_id].discard(client)
+                        disconnected.add(client)
+                    else:
+                        tasks.append(client.send_str(text))
+                
+                # Execute all sends concurrently and capture failures
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for i, client in enumerate([c for c in clients_set if not c.closed]):
+                        if i < len(results) and isinstance(results[i], Exception):
+                            disconnected.add(client)
+                
+                # Clean up disconnected clients in batch
+                for client in disconnected:
+                    clients_set.discard(client)
         except Exception as e:
             print(f"[!] Error in broadcast_aggregated_state: {e}")
             await asyncio.sleep(1)  # Back off on error
@@ -315,7 +339,7 @@ def create_app(static_dir: str):
         # 3. Use wss:// for Cloudflare, ws:// for local/unsecured
         protocol = 'wss' if is_secure else 'ws'
         
-        # 4. Fallback to env variable if you decide to hardcode it later
+        # 4. Fallback to env variable
         if WS_URL:
             ws_url = WS_URL
         else:
