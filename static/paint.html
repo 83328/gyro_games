@@ -331,6 +331,7 @@ let roundTime = 60; // seconds
 let timeLeft = roundTime;
 let timerInterval = null;
 let roundActive = true;
+let intermissionInterval = null; // countdown before auto-restart
 
 // Create overlay for winner
 const winOverlay = document.createElement('div');
@@ -376,6 +377,8 @@ function showWinOverlay(role) {
 }
 
 function startRoundTimer() {
+  // Cancel any pending intermission countdown
+  if (intermissionInterval) { clearInterval(intermissionInterval); intermissionInterval = null; }
   timeLeft = roundTime;
   roundActive = true;
   if(timerInterval) clearInterval(timerInterval);
@@ -416,12 +419,36 @@ function endRound() {
     appendLog(`Tie: ${winners.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(', ')}`);
     setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
   }
-  // hide the prominent countdown badge when round ends
-  if (countdownBadge) countdownBadge.style.display = 'none';
+  // Immediately clear the board visuals/state so a new game starts cleanly
+  initField();
+  draw();
+
+  // Start a 5-second intermission countdown, then auto-restart a new round
+  if (intermissionInterval) { clearInterval(intermissionInterval); intermissionInterval = null; }
+  let restartIn = 5;
+  if (countdownBadge) {
+    countdownBadge.style.display = '';
+    countdownBadge.textContent = `Next round in ${restartIn}s`;
+  }
+  intermissionInterval = setInterval(() => {
+    restartIn--;
+    if (countdownBadge) countdownBadge.textContent = `Next round in ${restartIn}s`;
+    if (restartIn <= 0) {
+      clearInterval(intermissionInterval);
+      intermissionInterval = null;
+      // Fully reset players/field and start the new round
+      initPlayers();
+      winOverlay.style.display = 'none';
+      startRoundTimer();
+      draw();
+    }
+  }, 1000);
 }
 
 // Restart button logic
 document.getElementById('restart').addEventListener('click', ()=>{
+  // Cancel any pending intermission countdown
+  if (intermissionInterval) { clearInterval(intermissionInterval); intermissionInterval = null; }
   initPlayers();
   // initPlayers already calls initField
   roundActive = true;
