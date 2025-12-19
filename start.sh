@@ -1,28 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Load environment variables safely
-set -a
-source .env
-set +a
+PORT=${PORT:-8080}
 
-echo "Starting Cloudflare tunnel using token..."
+# Load environment variables safely if .env exists
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
 
-# Start cloudflared using token from .env
-nohup cloudflared tunnel run --token "$CLOUDFLARED_TOKEN" > cloudflared.log 2>&1 &
+# Create venv if missing and install deps
+if [[ ! -d .venv ]]; then
+  python3 -m venv .venv
+fi
+source .venv/bin/activate
+pip install --disable-pip-version-check --no-cache-dir -r requirements.txt
 
-sleep 5
-echo "Tunnel started. Logs are in cloudflared.log"
+# Start Cloudflare tunnel (best-effort) if token present
+if [[ -n "${CLOUDFLARED_TOKEN:-}" ]]; then
+  echo "Starting Cloudflare tunnel using token..."
+  nohup cloudflared tunnel run --token "$CLOUDFLARED_TOKEN" > cloudflared.log 2>&1 &
+  sleep 5
+  echo "Tunnel started. Logs are in cloudflared.log"
+else
+  echo "CLOUDFLARED_TOKEN not set; skipping tunnel startup"
+fi
+
 echo ""
-echo "Starting server with uv..."
+echo "Starting server..."
 echo "Server will be accessible via:"
-echo "  http://localhost:8080 (local development)"
-echo "  https://games.arthurlimpens.com (external via tunnel)"
+echo "  http://localhost:${PORT} (local development)"
+echo "  https://games.arthurlimpens.com (external via tunnel if running)"
 echo ""
 echo "Press CTRL+C to stop"
 
-# Run backend (bind to localhost)
-uv run server.py \
-  --host 127.0.0.1 \
-  --port 8080 \
+python server.py \
+  --host 0.0.0.0 \
+  --port "${PORT}" \
   --static ./static
