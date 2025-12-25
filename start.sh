@@ -1,55 +1,129 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+#######################################
+# Config
+#######################################
 PORT=${PORT:-8080}
 
-# Load environment variables safely if .env exists
+#######################################
+# Load environment variables
+#######################################
 if [[ -f .env ]]; then
   set -a
   source .env
   set +a
 fi
 
-# Create venv if missing and install deps
+#######################################
+# Sanity checks
+#######################################
+command -v cloudflared >/dev/null || {
+  echo "❌ cloudflared not found in PATH"
+  exit 1
+}
+
+#######################################
+# Kill any lingering process on PORT
+#######################################
+if lsof -ti :${PORT} >/dev/null 2>&1; then
+  echo "⚠️  Killing lingering process on port ${PORT}..."
+  lsof -ti :${PORT} | xargs kill -9 2>/dev/null || true
+  sleep 1
+fi
+
+#######################################
+# Python venv & deps
+#######################################
 if [[ ! -d .venv ]]; then
   python3 -m venv .venv
 fi
+
 source .venv/bin/activate
-# Ensure pip exists in the venv (fixes macOS "pip: command not found")
-if ! command -v pip >/dev/null 2>&1; then
-  python3 -m ensurepip --upgrade || true
+
+python3 -m ensurepip --upgrade >/dev/null 2>&1 || true
+python3 -m pip install \
+  --disable-pip-version-check \
+  --no-cache-dir \
+  -r requirements.txt
+
+#######################################
+# Cleanup handler
+#######################################
+cleanup() {
+  echo ""
+  echo "Stopping services..."
+  [[ -n "${SERVER_PID:-}" ]] && kill "$SERVER_PID" 2>/dev/null || true
+  [[ -n "${CF_PID:-}" ]] && kill "$CF_PID" 2>/dev/null || true
+  wait 2>/dev/null || true
+  echo "Stopped cleanly."
+}
+trap cleanup INT TERM EXIT
+
+#######################################
+# Start backend FIRST
+#######################################
+echo "Starting backend on port ${PORT}..."
+
+python server.py \
+  --host 0.0.0.0 \
+  --port "${PORT}" \
+  --static ./static &
+
+SERVER_PID=$!
+
+sleep 1
+
+#######################################
+# Start Cloudflare tunnel (token mode)
+#######################################
+if [[ -z "${CLOUDFLARED_TOKEN:-}" ]]; then
+  echo "❌ CLOUDFLARED_TOKEN not set in .env"
+  exit 1
 fi
 
-# Install Python dependencies using the venv's interpreter
-python3 -m pip install --disable-pip-version-check --no-cache-dir -r requirements.txt
+echo "Starting Cloudflare tunnel..."
 
-# Start Cloudflare tunnel (best-effort) if token present
-if [[ -n "${CLOUDFLARED_TOKEN:-}" ]]; then
-  echo "Starting Cloudflare tunnel using token..."
-  # Lower priority and quiet logs to reduce CPU contention on macOS
-  CLOUDFLARED_ARGS=${CLOUDFLARED_ARGS:---no-autoupdate --loglevel warn}
-  nohup nice -n 10 cloudflared tunnel run --token "$CLOUDFLARED_TOKEN" $CLOUDFLARED_ARGS > cloudflared.log 2>&1 &
-  sleep 5
-  echo "Tunnel started. Logs are in cloudflared.log"
-else
-  echo "CLOUDFLARED_TOKEN not set; skipping tunnel startup"
-fi
+cloudflared tunnel \
+  --no-autoupdate \
+  --loglevel warn \
+  run \
+  --token "$CLOUDFLARED_TOKEN" \
+  > cloudflared.log 2>&1 &
 
+CF_PID=$!
+
+#######################################
+# Wait for tunnel readiness
+#######################################
+echo -n "Waiting for tunnel to connect"
+for _ in {1..10}; do
+  if grep -q "Connected to Cloudflare" cloudflared.log 2>/dev/null; then
+    echo " ✅"
+    break
+  fi
+  echo -n "."
+  sleep 1
+done
+
+#######################################
+# Info
+#######################################
 echo ""
-echo "Starting server..."
-echo "Server will be accessible via:"
-echo "  http://localhost:${PORT} (local development)"
-echo "  https://games.arthurlimpens.com (external via tunnel if running)"
-echo ""
+echo "====================================="
+echo "🚀 Server running"
+echo "Local:   http://localhost:${PORT}"
+echo "Public:  https://games.arthurlimpens.com"
+echo "Logs:    cloudflared.log"
+echo "====================================="
 echo "Press CTRL+C to stop"
+echo ""
 
-# Keep Mac awake to avoid App Nap / timer coalescing stutters
-USE_CAFFEINATE=${USE_CAFFEINATE:-1}
-IS_DARWIN=0; [[ "$(uname -s)" == "Darwin" ]] && IS_DARWIN=1 || true
-
-CMD=( python server.py --host 0.0.0.0 --port "${PORT}" --static ./static )
-if [[ ${IS_DARWIN} -eq 1 && ${USE_CAFFEINATE} -eq 1 && -x "$(command -v caffeinate || true)" ]]; then
-  exec caffeinate -dims "${CMD[@]}"
+#######################################
+# macOS: prevent App Nap
+#######################################
+if [[ "$(uname -s)" == "Darwin" ]] && command -v caffeinate >/dev/null; then
+  exec caffeinate -dims wait
 else
-  exec "${CMD[@]}"
+  wait
 fi

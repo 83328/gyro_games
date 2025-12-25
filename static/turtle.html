@@ -249,7 +249,7 @@ function draw(){
 
 // handle gyroscope input
 // Code-only speed multiplier (no UI) to globally scale turtle responsiveness/speed
-const SPEED_MULTIPLIER = 2.0; // increase to make turtles move faster
+const SPEED_MULTIPLIER = 1.5; // increase to make turtles move faster
 function handleInput(role, beta, gamma){
   const p = players[role]; if(!p || !raceRunning) return;
   const intensity = (Math.abs(beta) + Math.abs(gamma)) * 0.05 * SPEED_MULTIPLIER; // adjusted multiplier

@@ -467,7 +467,7 @@ function updateHudSizes(){
         // Set color of parent .role div
         if(el.parentElement) el.parentElement.style.color = COLORS[r];
         // trigger winner splash if threshold exceeded
-        if(pct > 95 && !splashActive){ showWinnerSplash(r); }
+        if(pct > 90 && !splashActive){ showWinnerSplash(r); }//winner size needed
       }
     }
   }catch(e){}

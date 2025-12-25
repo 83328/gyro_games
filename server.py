@@ -42,7 +42,8 @@ async def websocket_handler(request):
     # Basic token check: require ?token=...
     token = request.rel_url.query.get('token')
     room_id = request.rel_url.query.get('room')
-    if token != AUTH_TOKEN:
+    # If GYRO_TOKEN is unset, allow connections without a token. Otherwise enforce match.
+    if AUTH_TOKEN is not None and token != AUTH_TOKEN:
         print(f"[!] WebSocket auth failed from {request.remote} - token={token!r} expected={AUTH_TOKEN!r}")
         return web.Response(status=401, text='Unauthorized')
     if not room_id or not isinstance(room_id, str) or len(room_id) != 3:
