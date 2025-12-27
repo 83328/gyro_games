@@ -1,0 +1,636 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Racer</title>
+<style>
+  html,body{height:100%;margin:0;padding:0}
+  body {
+    font-family:'Segoe UI',Arial,Helvetica,sans-serif;
+    background:#000;
+    color:#eee;
+    overflow:hidden;
+  }
+  canvas {
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:radial-gradient(ellipse at center, #0d1224 0%, #060a15 50%, #000000 100%);
+  }
+  h1{display:none}
+  /* Glass HUD */
+  .hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+  .role{padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-weight:600;font-size:14px;transition:all 0.3s ease;border:1px solid rgba(255,255,255,0.1);text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  .role:hover{background:rgba(255,255,255,0.12);transform:translateY(-2px)}
+  .role.eliminated{opacity:0.4;text-decoration:line-through}
+  button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
+</style>
+</head>
+<body>
+  <h1>Racer</h1>
+
+  <div class="hud">
+    <div class="role" id="blueContainer">Blue <span id="sBlue">0s</span></div>
+    <div class="role" id="redContainer">Red <span id="sRed">0s</span></div>
+    <div class="role" id="yellowContainer" style="display:none">Yellow <span id="sYellow">0s</span></div>
+    <div class="role" id="greenContainer" style="display:none">Green <span id="sGreen">0s</span></div>
+    <div class="role" id="orangeContainer" style="display:none">Orange <span id="sOrange">0s</span></div>
+    <div class="role" id="purpleContainer" style="display:none">Purple <span id="sPurple">0s</span></div>
+    <div class="role" id="cyanContainer" style="display:none">Cyan <span id="sCyan">0s</span></div>
+    <div class="role" id="magentaContainer" style="display:none">Magenta <span id="sMagenta">0s</span></div>
+    <button id="newRound" style="display:none">New round</button>
+  </div>
+
+  <canvas id="c" width="700" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// runtime-safe logger
+function appendLog(msg){
+  try{
+    const el = document.getElementById('info');
+    if(el) el.textContent = msg;
+    else console.log(msg);
+  }catch(e){ console.log(msg); }
+}
+
+// Read player count from URL parameter
+function getPlayerCountFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
+}
+let playerCount = getPlayerCountFromUrl();
+
+function applyPlayerCountFromMeta(newCount){
+  const clamped = Math.max(2, Math.min(8, parseInt(newCount || playerCount, 10)));
+  if(Number.isNaN(clamped) || clamped === playerCount) return;
+  playerCount = clamped;
+  const params = new URLSearchParams(window.location.search);
+  params.set('players', String(playerCount));
+  const qs = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}?${qs}`);
+  resetGame('Player count updated');
+}
+
+const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f', orange:'#ff9f4d', purple:'#b58cff', cyan:'#4de6e6', magenta:'#ff6bff'};
+let ws=null;
+let activeRoles = ['blue','red'];
+let survivalTimes = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
+
+let players = {};
+let obstacles = [];
+let gameTime = 0;
+let roundRunning = true;
+let intermissionTimer = null;
+let intermissionLeft = 0;
+
+let SHIP_SCALE = 2.0;
+const LANE_WIDTH = 80; // width of each lane
+const OBSTACLE_SPEED_BASE = 200; // px/s
+const SPAWN_INTERVAL = 1.2; // seconds between obstacle spawns
+let _spawnTimer = 0.5; // seed first spawn
+const SHIELD_DURATION = 4.0; // seconds of protection
+const POWERUP_SPAWN_INTERVAL = 9.0; // base seconds between powerup spawns
+const POWERUP_SPEED = 140; // px/s for falling powerups
+let powerup = null; // {x,y,speed,kind:'shield'}
+let _powerupTimer = 4.0; // seed early spawn
+
+function resizeCanvasToDisplay(){
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  canvas.width = w;
+  canvas.height = h;
+  const size = Math.min(w,h);
+  SHIP_SCALE = Math.max(1.2, (size/700) * 1.6);
+  repositionPlayers();
+}
+
+function repositionPlayers(){
+  const n = activeRoles.length;
+  const laneSpacing = Math.min(LANE_WIDTH, canvas.width / (n + 1));
+  for(let i=0;i<n;i++){
+    const role = activeRoles[i];
+    const p = players[role];
+    if(!p) continue;
+    p.lane = i;
+    p.x = (i + 1) * laneSpacing;
+    if(!p.alive) continue; // keep dead players at their eliminated position
+    p.y = canvas.height - 80;
+  }
+}
+
+window.addEventListener('resize', resizeCanvasToDisplay);
+resizeCanvasToDisplay();
+
+// Winner splash overlay
+const winOverlay = document.createElement('div');
+winOverlay.style.position = 'fixed';
+winOverlay.style.left = '0';
+winOverlay.style.top = '0';
+winOverlay.style.width = '100%';
+winOverlay.style.height = '100%';
+winOverlay.style.display = 'none';
+winOverlay.style.alignItems = 'center';
+winOverlay.style.justifyContent = 'center';
+winOverlay.style.zIndex = 10001;
+winOverlay.style.color = '#fff';
+winOverlay.style.fontFamily = 'Arial, Helvetica, sans-serif';
+winOverlay.style.fontSize = '52px';
+winOverlay.style.fontWeight = '800';
+winOverlay.style.pointerEvents = 'none';
+winOverlay.style.textShadow = '0 2px 8px rgba(0,0,0,0.8)';
+document.body.appendChild(winOverlay);
+
+function showWinnerSplash(role, opts={}){
+  const bg = opts.background || colors[role] || '#000';
+  winOverlay.style.background = bg;
+  let hex = (bg.replace('#',''));
+  let r=0,g=0,b=0;
+  try{ r = parseInt(hex.substring(0,2),16); g = parseInt(hex.substring(2,4),16); b = parseInt(hex.substring(4,6),16); }catch(e){}
+  const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+  winOverlay.style.color = opts.textColor || ((lum > 170) ? '#001' : '#fff');
+  const base = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Winner';
+  const label = opts.label || `${base} wins!`;
+  winOverlay.textContent = label;
+  winOverlay.style.display = 'flex';
+  if(winOverlay._hideTimeout){ clearTimeout(winOverlay._hideTimeout); }
+  const duration = opts.duration || 3000;
+  winOverlay._hideTimeout = setTimeout(()=>{ winOverlay.style.display = 'none'; }, duration);
+}
+
+// init players
+function initPlayers(){
+  const n = playerCount;
+  const possible = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
+  activeRoles = possible.slice(0, n);
+
+  players={};
+  obstacles=[];
+  powerup=null;
+  gameTime = 0;
+  _spawnTimer = 0.5;
+  _powerupTimer = 4.0;
+
+  const laneSpacing = Math.min(LANE_WIDTH, canvas.width / (n + 1));
+  for(let i=0;i<n;i++){
+    const role = activeRoles[i];
+    survivalTimes[role] = 0;
+    players[role] = {
+      x: (i + 1) * laneSpacing,
+      y: canvas.height - 80,
+      vx: 0,
+      lane: i,
+      alive: true,
+      startTime: performance.now()/1000
+    };
+  }
+
+  roundRunning = true;
+
+  // Color HUD labels
+  const containers = {
+    blue: document.getElementById('blueContainer'),
+    red: document.getElementById('redContainer'),
+    yellow: document.getElementById('yellowContainer'),
+    green: document.getElementById('greenContainer'),
+    orange: document.getElementById('orangeContainer'),
+    purple: document.getElementById('purpleContainer'),
+    cyan: document.getElementById('cyanContainer'),
+    magenta: document.getElementById('magentaContainer')
+  };
+  const spans = {
+    blue: document.getElementById('sBlue'),
+    red: document.getElementById('sRed'),
+    yellow: document.getElementById('sYellow'),
+    green: document.getElementById('sGreen'),
+    orange: document.getElementById('sOrange'),
+    purple: document.getElementById('sPurple'),
+    cyan: document.getElementById('sCyan'),
+    magenta: document.getElementById('sMagenta')
+  };
+  
+  for(const role of Object.keys(containers)){
+    const c = containers[role];
+    if(c && activeRoles.includes(role)){
+      c.style.display = '';
+      c.style.color = colors[role];
+      c.classList.remove('eliminated');
+      if(spans[role]) {
+        spans[role].style.color = colors[role];
+        spans[role].textContent = '0s';
+      }
+    } else if(c){
+      c.style.display = 'none';
+    }
+  }
+}
+
+initPlayers();
+const newRoundBtn = document.getElementById('newRound');
+let gameMessage = '';
+
+function resetGame(reason){
+  gameMessage = '';
+  if(newRoundBtn) newRoundBtn.style.display='none';
+  if(winOverlay){
+    winOverlay.style.display='none';
+    if(winOverlay._hideTimeout) clearTimeout(winOverlay._hideTimeout);
+  }
+  if(reason) appendLog(reason);
+  if(intermissionTimer){ clearInterval(intermissionTimer); intermissionTimer = null; }
+  initPlayers();
+}
+
+// draw
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // draw lane markers
+  const n = activeRoles.length;
+  const laneSpacing = Math.min(LANE_WIDTH, canvas.width / (n + 1));
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=n;i++){
+    const x = i * laneSpacing;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  // obstacles
+  for(const ob of obstacles){
+    ctx.save();
+    ctx.translate(ob.x, ob.y);
+    // draw asteroid-like obstacle
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    const r = ob.radius;
+    const points = 8;
+    for(let i=0;i<points;i++){
+      const angle = (i / points) * Math.PI * 2;
+      const dr = r * (0.8 + Math.random() * 0.4);
+      const px = Math.cos(angle) * dr;
+      const py = Math.sin(angle) * dr;
+      if(i===0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // powerup (shield)
+  if(powerup){
+    ctx.save();
+    ctx.translate(powerup.x, powerup.y);
+    ctx.fillStyle = '#7fd3ff';
+    ctx.strokeStyle = '#bfe8ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0,0,12,0,Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#001';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SH',0,0);
+    ctx.restore();
+  }
+
+  // ships
+  for(const role of activeRoles){
+    const p = players[role];
+    if(!p.alive){
+      // draw explosion particles
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = colors[role];
+      for(let i=0;i<6;i++){
+        const angle = (i/6) * Math.PI * 2;
+        const dist = 15 + Math.random() * 10;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle)*dist, Math.sin(angle)*dist, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+      continue;
+    }
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.fillStyle = colors[role];
+    // ship triangle pointing up
+    const s = Math.max(1, Math.floor(10 * SHIP_SCALE));
+    ctx.beginPath();
+    ctx.moveTo(0, -s-2);
+    ctx.lineTo(s, s+2);
+    ctx.lineTo(-s, s+2);
+    ctx.closePath();
+    ctx.fill();
+    // engine glow
+    ctx.fillStyle = 'rgba(255,150,50,0.8)';
+    ctx.beginPath();
+    ctx.moveTo(-s*0.4, s+2);
+    ctx.lineTo(0, s+2+6);
+    ctx.lineTo(s*0.4, s+2);
+    ctx.closePath();
+    ctx.fill();
+
+    // shield outline when active
+    const nowSec = performance.now()/1000;
+    if(p.shieldUntil && p.shieldUntil > nowSec){
+      ctx.strokeStyle = 'rgba(100,200,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0,0, Math.max(14, Math.floor(16*SHIP_SCALE)), 0, Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // time display
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px monospace';
+  const timerText = intermissionTimer ? `Next round in ${Math.max(0, Math.ceil(intermissionLeft))}s` : `Time: ${Math.floor(gameTime)}s`;
+  ctx.fillText(timerText, 10, 20);
+
+  drawGameMessage();
+}
+
+// step
+function step(dt){
+  if(!roundRunning) return;
+  gameTime += dt;
+
+  // update survival times for alive players
+  const nowSec = performance.now()/1000;
+  for(const role of activeRoles){
+    const p = players[role];
+    if(p.alive){
+      survivalTimes[role] = nowSec - p.startTime;
+    }
+  }
+
+   // spawn powerups (shield)
+  _powerupTimer -= dt;
+  if(_powerupTimer <= 0 && powerup==null){
+    const margin = 40;
+    powerup = {
+      x: margin + Math.random() * (canvas.width - margin*2),
+      y: -20,
+      speed: POWERUP_SPEED,
+      kind: 'shield'
+    };
+    _powerupTimer = POWERUP_SPAWN_INTERVAL + Math.random()*6; // make them feel rare
+  }
+
+  // spawn obstacles
+  _spawnTimer -= dt;
+  if(_spawnTimer <= 0){
+    const margin = 40;
+    const x = margin + Math.random() * (canvas.width - margin*2);
+    obstacles.push({
+      x: x,
+      y: -30,
+      radius: 15 + Math.random() * 10,
+      speed: OBSTACLE_SPEED_BASE + gameTime * 5 // gradually increase speed
+    });
+    _spawnTimer = SPAWN_INTERVAL - Math.min(0.8, gameTime / 60); // spawn faster over time
+  }
+
+  // update obstacles
+  for(let i=obstacles.length-1;i>=0;i--){
+    const ob = obstacles[i];
+    ob.y += ob.speed * dt;
+    if(ob.y > canvas.height + 50){
+      obstacles.splice(i,1);
+      continue;
+    }
+
+    // collision with players
+    for(const role of activeRoles){
+      const p = players[role];
+      if(!p.alive) continue;
+      const shieldActive = p.shieldUntil && p.shieldUntil > nowSec;
+      const dx = p.x - ob.x;
+      const dy = p.y - ob.y;
+      const hitR = ob.radius + Math.floor(12 * SHIP_SCALE);
+      if(dx*dx + dy*dy < hitR * hitR){
+        if(shieldActive){
+          // absorb hit, consume obstacle but keep player alive
+          obstacles.splice(i,1);
+          break;
+        } else {
+          p.alive = false;
+          // update UI
+          const container = document.getElementById(role + 'Container');
+          if(container) container.classList.add('eliminated');
+          const span = document.getElementById('s' + role.charAt(0).toUpperCase() + role.slice(1));
+          if(span) span.textContent = Math.floor(survivalTimes[role]) + 's';
+          obstacles.splice(i,1);
+          break;
+        }
+      }
+    }
+  }
+
+  // update powerup movement and pickup
+  if(powerup){
+    powerup.y += powerup.speed * dt;
+    if(powerup.y > canvas.height + 40){
+      powerup = null;
+    } else {
+      for(const role of activeRoles){
+        const p = players[role];
+        if(!p.alive) continue;
+        const dx = p.x - powerup.x;
+        const dy = p.y - powerup.y;
+        const pickR = Math.max(16, 20 * SHIP_SCALE);
+        if(dx*dx + dy*dy < pickR * pickR){
+          p.shieldUntil = nowSec + SHIELD_DURATION;
+          appendLog(`${role} picked up Shield!`);
+          powerup = null;
+          break;
+        }
+      }
+    }
+  }
+
+  // update player positions (left/right movement)
+  const n = activeRoles.length;
+  for(const role of activeRoles){
+    const p = players[role];
+    if(!p.alive) continue;
+    
+    p.x += p.vx * dt;
+    // keep in bounds
+    const margin = 20;
+    if(p.x < margin) p.x = margin;
+    if(p.x > canvas.width - margin) p.x = canvas.width - margin;
+    
+    // friction
+    p.vx *= 0.92;
+  }
+
+  // check for winner
+  const aliveCount = activeRoles.filter(r => players[r].alive).length;
+  if(aliveCount === 1){
+    roundRunning = false;
+    const winner = activeRoles.find(r => players[r].alive);
+    gameMessage = `${winner.charAt(0).toUpperCase() + winner.slice(1)} wins!`;
+    showWinnerSplash(winner, {duration: 4000});
+    appendLog(gameMessage);
+    autoRestartCountdown();
+  } else if(aliveCount === 0){
+    roundRunning = false;
+    gameMessage = 'Everyone crashed!';
+    showWinnerSplash(null, {label: 'No survivors!', background: '#666', duration: 3000});
+    appendLog(gameMessage);
+    autoRestartCountdown();
+  }
+}
+
+function autoRestartCountdown(){
+  if(newRoundBtn) newRoundBtn.style.display='none';
+  intermissionLeft = 5;
+  if(intermissionTimer) { clearInterval(intermissionTimer); intermissionTimer=null; }
+  intermissionTimer = setInterval(()=>{
+    intermissionLeft -= 1;
+    if(intermissionLeft <= 0){
+      clearInterval(intermissionTimer); intermissionTimer=null;
+      resetGame('Auto new round');
+    }
+  }, 1000);
+}
+
+function drawGameMessage(){
+  if(!gameMessage) return;
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.6)';
+  ctx.fillRect(canvas.width/2 - 220, canvas.height/2 - 40, 440, 80);
+  ctx.fillStyle='#fff';
+  ctx.font='20px monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(gameMessage, canvas.width/2, canvas.height/2);
+  ctx.restore();
+}
+
+// input
+function handleTilt(role, beta, gamma){
+  const p = players[role];
+  if(!p || !roundRunning || !p.alive) return;
+
+  // Left/right (gamma) = movement
+  const DEAD = 3; // degrees deadzone
+  let moveVal = (Math.abs(gamma) < DEAD) ? 0 : (gamma / 30);
+  moveVal = Math.max(-1, Math.min(1, moveVal));
+  
+  // apply movement velocity
+  const MAX_SPEED = 300; // px/s
+  p.vx = moveVal * MAX_SPEED;
+}
+
+// Room id extraction from URL
+function getRoomId() {
+  const params = new URLSearchParams(window.location.search);
+  let room = params.get('room');
+  if(room && /^[A-Z]{3}$/.test(room)) return room.toUpperCase();
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let code = '';
+  for (let i = 0; i < 3; ++i) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+const ROOM_ID = getRoomId();
+
+// unified room badge helper
+(function(){
+  let rb = document.getElementById('roomBadge');
+  if(!rb){ 
+    rb = document.createElement('div');
+    rb.id='roomBadge';
+    rb.style.cssText='position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000';
+    document.body.appendChild(rb);
+  }
+  rb.textContent = `Room: ${ROOM_ID}`;
+  window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
+})();
+
+// websocket
+fetch('/api/token').then(r=>r.json()).then(data=>{
+  const token=data.token;
+  const proto=(location.protocol==='https:')?'wss':'ws';
+  const wsUrl=data.ws_url?(data.ws_url.includes('?')?data.ws_url+'&token='+encodeURIComponent(token)+'&room='+ROOM_ID:data.ws_url+'?token='+encodeURIComponent(token)+'&room='+ROOM_ID):`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}&room=${ROOM_ID}`;
+  ws=new WebSocket(wsUrl);
+  ws.onopen=()=>{
+    appendLog('Connected');
+    if(window.__setRoomBadge) window.__setRoomBadge(`Connected — Room: ${ROOM_ID}`);
+    ws.send(JSON.stringify({type:'request-meta', room:ROOM_ID}));
+    ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+  };
+  ws.onmessage=(ev)=>{
+    try{
+      const d=JSON.parse(ev.data);
+      if(!d) return;
+      if(d.type==='room-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        if(d.meta && d.meta.playerCount!==undefined) applyPlayerCountFromMeta(d.meta.playerCount);
+        return;
+      }
+      if(d.type==='request-meta' && (!d.room || String(d.room).toUpperCase()===ROOM_ID)){
+        ws.send(JSON.stringify({type:'room-meta', room:ROOM_ID, meta:{playerCount}}));
+        return;
+      }
+      if(d.type==='batch' && d.meta && d.meta.playerCount!==undefined){
+        applyPlayerCountFromMeta(d.meta.playerCount);
+      }
+      
+      // Handle batch messages
+      if(d.type === 'batch' && Array.isArray(d.players)){
+        for(const playerMsg of d.players){
+          if(!playerMsg || !playerMsg.role) continue;
+          if(playerMsg.room && String(playerMsg.room).toUpperCase() !== ROOM_ID) continue;
+          if(!activeRoles.includes(playerMsg.role)) continue;
+          if(playerMsg.orientBeta!==undefined && playerMsg.orientGamma!==undefined){
+            handleTilt(playerMsg.role, playerMsg.orientBeta, playerMsg.orientGamma);
+          }else if(playerMsg.beta!==undefined && playerMsg.gamma!==undefined){
+            handleTilt(playerMsg.role, playerMsg.beta, playerMsg.gamma);
+          }
+        }
+      }
+    }catch(e){}
+  };
+  ws.onclose=()=>{
+    appendLog('Disconnected');
+    if(window.__setRoomBadge) window.__setRoomBadge('Disconnected');
+    setTimeout(()=>location.reload(),2000);
+  };
+}).catch(e=>{appendLog('No backend /api/token');});
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(40,now-last)/1000;
+  last=now;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+if(newRoundBtn){
+  newRoundBtn.addEventListener('click', ()=>{
+    resetGame('New round');
+  });
+}
+</script>
+</body>
+</html>
