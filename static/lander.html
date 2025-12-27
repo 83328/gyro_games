@@ -307,11 +307,12 @@ function drawPads(){
     // Glow effect
     if(p.landed){
       ctx.globalAlpha = 0.4;
-      const glow = ctx.createRadialGradient(p.x, p.y-2, 0, p.x, p.y-2, p.w*0.8);
+      const glow = ctx.createRadialGradient(p.x, p.y-2, 0, p.x, p.y-2, p.w*1.2);
       glow.addColorStop(0, colorLight);
+      glow.addColorStop(0.5, color);
       glow.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = glow;
-      ctx.fillRect(p.x - p.w*0.8, p.y-6-p.w*0.5, p.w*1.6, p.w*0.8);
+      ctx.beginPath(); ctx.arc(p.x, p.y-2, p.w*1.2, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
     // Main pad with gradient
@@ -383,15 +384,20 @@ function drawLander(pl, color){
     return;
   }
   // Draw normal lander with glass effects
-  ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(pl.angle);
-  // Outer glow
-  ctx.globalAlpha = 0.2;
-  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
-  glow.addColorStop(0, colorLight);
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(14,14); ctx.lineTo(-14,14); ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.save(); ctx.translate(pl.x, pl.y);
+  // Outer glow (only when landed, drawn before rotation so it's always circular)
+  if(pl.landed){
+    ctx.globalAlpha = 0.3;
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 32);
+    glow.addColorStop(0, colorLight);
+    glow.addColorStop(0.6, color);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  // Now rotate for the ship itself
+  ctx.rotate(pl.angle);
   // Main lander with gradient
   const grad = ctx.createLinearGradient(0, -12, 0, 10);
   grad.addColorStop(0, colorLight);
@@ -411,7 +417,7 @@ function drawLander(pl, color){
   ctx.strokeStyle = 'rgba(255,255,255,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.stroke();
-  // flame with glow
+  // flame with glow (thrust)
   if(pl.thrust>0 && pl.fuel>0){
     const flameHeight = 10+Math.random()*8*pl.thrust;
     // Flame glow
@@ -430,6 +436,23 @@ function drawLander(pl, color){
     flameGrad.addColorStop(1, '#ff4400');
     ctx.fillStyle = flameGrad;
     ctx.beginPath(); ctx.moveTo(-6,10); ctx.lineTo(0,10+flameHeight); ctx.lineTo(6,10); ctx.closePath(); ctx.fill();
+  }
+  // Burn effect when crashed
+  if(pl.crashed){
+    for(let i=0; i<3; i++){
+      const offsetX = (Math.random()-0.5)*12;
+      const offsetY = (Math.random()-0.5)*8;
+      const fireSize = 8 + Math.random()*10;
+      // Fire glow
+      ctx.globalAlpha = 0.5 + Math.random()*0.3;
+      const fireGlow = ctx.createRadialGradient(offsetX, offsetY, 0, offsetX, offsetY, fireSize);
+      fireGlow.addColorStop(0, '#ff6600');
+      fireGlow.addColorStop(0.4, '#ff3300');
+      fireGlow.addColorStop(1, 'rgba(255,0,0,0)');
+      ctx.fillStyle = fireGlow;
+      ctx.beginPath(); ctx.arc(offsetX, offsetY, fireSize, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
