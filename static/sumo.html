@@ -85,6 +85,7 @@ let ws=null;
 const players = {};
 let activeRoles = ['blue','red'];
 const scores = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
+let roundStartTime = 0;
 
 const colors = {
   blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f',
@@ -96,7 +97,7 @@ const RADIUS = 26; // increased blob size
 const SPEED_MULTIPLIER = 1.2; // tweak this to make sumo faster/slower
 let MAX_SPEED = 220 * SPEED_MULTIPLIER;
 const FRICTION = 0.92;
-const PUSH_FORCE = 1.5;
+const PUSH_FORCE = 3.5;
 
 function resizeCanvasToDisplay(){
   const size = Math.min(window.innerWidth, window.innerHeight);
@@ -309,6 +310,7 @@ function hideSplash() {
 function resetRound(){
   const size = Math.min(canvas.width, canvas.height);
   arena.radius = Math.min(280, size/2 - 20);
+  roundStartTime = performance.now();
   initPlayers();
 }
 
@@ -373,9 +375,11 @@ fetch('/api/token').then(r=>r.json()).then(data=>{
 let last=performance.now();
 function frame(now){
   const dt=Math.min(40,now-last)/1000; last=now;
-  // shrink arena twice as fast (but not below responsive minimum)
+  // Variable shrink rate: fast at start, gradually slowing down
+  const elapsedSeconds = (now - roundStartTime) / 1000;
+  const shrinkRate = Math.max(2.0, 6.0 - (elapsedSeconds / 5.0)); // 6x initially, down to 2x over 20 seconds
   const minR = (arena && arena.minRadius) ? arena.minRadius : 120;
-  arena.radius = Math.max(minR, arena.radius - dt*3.0 * SPEED_MULTIPLIER); // faster shrink scaled
+  arena.radius = Math.max(minR, arena.radius - dt * shrinkRate * SPEED_MULTIPLIER);
   // physics
   for(const role of activeRoles){
     const p=players[role];
