@@ -5,10 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Maze Runner</title>
 <style>
-  html,body{height:100%;}
-  body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#eee;display:flex;flex-direction:column;align-items:center;padding:20px 20px 36px 20px;margin:0;box-sizing:border-box;overflow:hidden}
-  canvas{background:#222;border:2px solid #333;display:block}
-  #scores{margin:8px}
+  html,body{height:100%;margin:0;padding:0;overflow:hidden}
+  body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#000;color:#fff;display:flex;flex-direction:column;height:100vh;margin:0;box-sizing:border-box;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%);position:absolute;top:0;left:0}
+  h1{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;margin:0;font-size:32px;font-weight:700;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
+  #scores{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #scores span{font-weight:600;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #scores button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #scores button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
@@ -72,17 +76,9 @@ const SPEED_MULTIPLIER = 2; // <- set desired multiplier here
 let MAX_SPEED = 0;
 
 function resizeCanvasToDisplay(){
-  // compute available width/height by subtracting UI elements' heights
-  const padW = 24;
-  const h1h = (document.querySelector('h1') ? document.querySelector('h1').getBoundingClientRect().height : 40);
-  const infoH = (document.getElementById('info') ? document.getElementById('info').getBoundingClientRect().height : 0);
-  const scoresH = (document.getElementById('scores') ? document.getElementById('scores').getBoundingClientRect().height : 0);
-  const ctrlH = (typeof ctrlContainer !== 'undefined' && ctrlContainer ? ctrlContainer.getBoundingClientRect().height : 0);
-  const reservedH = h1h + infoH + scoresH + ctrlH + 120; // extra margin to avoid clipping bottom controls
-  const availW = Math.max(400, window.innerWidth - padW);
-  const availH = Math.max(300, window.innerHeight - reservedH);
-  canvas.width = Math.min(availW, 1400);
-  canvas.height = Math.min(availH, 1200);
+  // fullscreen canvas
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
   cell.w = canvas.width / COLS;
   cell.h = canvas.height / ROWS;
   MAX_SPEED = Math.min(cell.w, cell.h) * 6 * SPEED_MULTIPLIER;
@@ -263,42 +259,78 @@ function carveCorridor(ax,ay,bx,by,thickness){
 
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // draw maze
+  // draw maze with enhanced walls
   for(let r=0;r<ROWS;r++){
     for(let c=0;c<COLS;c++){
       if(maze[r][c]===1){
-        ctx.fillStyle='#333';
+        const grad = ctx.createLinearGradient(c*cell.w, r*cell.h, c*cell.w + cell.w, r*cell.h + cell.h);
+        grad.addColorStop(0, '#2a2a3e');
+        grad.addColorStop(1, '#1a1a2e');
+        ctx.fillStyle = grad;
         ctx.fillRect(c*cell.w, r*cell.h, cell.w, cell.h);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(c*cell.w, r*cell.h, cell.w, cell.h);
       }
     }
   }
-  // draw goal squares (corners and additional for optional players)
-  // Blue goal: top-right
-  ctx.fillStyle='#0033aa'; ctx.fillRect((COLS-1)*cell.w,0,cell.w,cell.h);
-  // Red goal: bottom-left
-  ctx.fillStyle='#aa0000'; ctx.fillRect(0,(ROWS-1)*cell.h,cell.w,cell.h);
-  // Yellow goal: top-left (opposite of yellow start at bottom-right)
-  if(activeRoles.includes('yellow')){ ctx.fillStyle='#ffd86b'; ctx.fillRect(0, 0, cell.w, cell.h); }
-  // Green goal: bottom-right (opposite of green start at top-left)
-  if(activeRoles.includes('green')){ ctx.fillStyle='#8fe58f'; ctx.fillRect((COLS-1)*cell.w, (ROWS-1)*cell.h, cell.w, cell.h); }
-  // Orange/Purple/Cyan/Magenta use mid-edges or center targets when present
-  if(activeRoles.includes('orange')){ ctx.fillStyle='#ffae42'; ctx.fillRect(Math.floor(COLS/2)*cell.w, 0, cell.w, cell.h); }
-  if(activeRoles.includes('purple')){ ctx.fillStyle='#b388ff'; ctx.fillRect(Math.floor(COLS/2)*cell.w, (ROWS-1)*cell.h, cell.w, cell.h); }
-  if(activeRoles.includes('cyan')){ ctx.fillStyle='#4deeea'; ctx.fillRect(0, Math.floor(ROWS/2)*cell.h, cell.w, cell.h); }
-  if(activeRoles.includes('magenta')){ ctx.fillStyle='#ff6bd6'; ctx.fillRect((COLS-1)*cell.w, Math.floor(ROWS/2)*cell.h, cell.w, cell.h); }
+  // draw goal squares with glow effect
+  const goalColors = {
+    blue: '#3b82f6', red: '#ef4444', yellow: '#fbbf24', green: '#10b981',
+    orange: '#f97316', purple: '#a855f7', cyan: '#06b6d4', magenta: '#ec4899'
+  };
+  function drawGoal(x, y, color) {
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = color;
+    ctx.fillRect(x*cell.w - 4, y*cell.h - 4, cell.w + 8, cell.h + 8);
+    ctx.globalAlpha = 1;
+    const grad = ctx.createRadialGradient((x+0.5)*cell.w, (y+0.5)*cell.h, 0, (x+0.5)*cell.w, (y+0.5)*cell.h, Math.min(cell.w, cell.h)*0.7);
+    grad.addColorStop(0, color);
+    grad.addColorStop(1, color + '80');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x*cell.w, y*cell.h, cell.w, cell.h);
+  }
+  drawGoal(COLS-1, 0, goalColors.blue);
+  drawGoal(0, ROWS-1, goalColors.red);
+  if(activeRoles.includes('yellow')) drawGoal(0, 0, goalColors.yellow);
+  if(activeRoles.includes('green')) drawGoal(COLS-1, ROWS-1, goalColors.green);
+  if(activeRoles.includes('orange')) drawGoal(Math.floor(COLS/2), 0, goalColors.orange);
+  if(activeRoles.includes('purple')) drawGoal(Math.floor(COLS/2), ROWS-1, goalColors.purple);
+  if(activeRoles.includes('cyan')) drawGoal(0, Math.floor(ROWS/2), goalColors.cyan);
+  if(activeRoles.includes('magenta')) drawGoal(COLS-1, Math.floor(ROWS/2), goalColors.magenta);
 
-  // draw players as circles at pixel positions
-  ctx.fillStyle='#4ea1ff';
-  ctx.beginPath(); ctx.arc(players.blue.px, players.blue.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle='#ff6b6b';
-  ctx.beginPath(); ctx.arc(players.red.px, players.red.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill();
-  // optional players
-  if(activeRoles.includes('yellow')){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(players.yellow.px, players.yellow.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
-  if(activeRoles.includes('green')){ ctx.fillStyle='#8fe58f'; ctx.beginPath(); ctx.arc(players.green.px, players.green.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
-  if(activeRoles.includes('orange')){ ctx.fillStyle='#ffae42'; ctx.beginPath(); ctx.arc(players.orange.px, players.orange.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
-  if(activeRoles.includes('purple')){ ctx.fillStyle='#b388ff'; ctx.beginPath(); ctx.arc(players.purple.px, players.purple.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
-  if(activeRoles.includes('cyan')){ ctx.fillStyle='#4deeea'; ctx.beginPath(); ctx.arc(players.cyan.px, players.cyan.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
-  if(activeRoles.includes('magenta')){ ctx.fillStyle='#ff6bd6'; ctx.beginPath(); ctx.arc(players.magenta.px, players.magenta.py, Math.min(cell.w,cell.h)/3, 0, Math.PI*2); ctx.fill(); }
+  // draw players with enhanced graphics
+  function drawPlayer(p, color) {
+    const rad = Math.min(cell.w,cell.h)/3;
+    ctx.globalAlpha = 0.2;
+    ctx.beginPath();
+    const glow = ctx.createRadialGradient(p.px, p.py, 0, p.px, p.py, rad * 2);
+    glow.addColorStop(0, color);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.arc(p.px, p.py, rad * 2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    const grad = ctx.createRadialGradient(p.px - rad*0.3, p.py - rad*0.3, 0, p.px, p.py, rad);
+    grad.addColorStop(0, color + 'dd');
+    grad.addColorStop(0.7, color);
+    grad.addColorStop(1, color);
+    ctx.fillStyle = grad;
+    ctx.arc(p.px, p.py, rad, 0, Math.PI*2);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.stroke();
+  }
+  drawPlayer(players.blue, goalColors.blue);
+  drawPlayer(players.red, goalColors.red);
+  if(activeRoles.includes('yellow')) drawPlayer(players.yellow, goalColors.yellow);
+  if(activeRoles.includes('green')) drawPlayer(players.green, goalColors.green);
+  if(activeRoles.includes('orange')) drawPlayer(players.orange, goalColors.orange);
+  if(activeRoles.includes('purple')) drawPlayer(players.purple, goalColors.purple);
+  if(activeRoles.includes('cyan')) drawPlayer(players.cyan, goalColors.cyan);
+  if(activeRoles.includes('magenta')) drawPlayer(players.magenta, goalColors.magenta);
 }
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}

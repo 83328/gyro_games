@@ -5,28 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Turtle Race</title>
 <style>
-  html,body{height:100%}
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: #0b0b10;
-    color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  canvas {
-    background: linear-gradient(#2a2a2a, #111);
-    border: 2px solid #333;
-    border-radius: 10px;
-    box-shadow: 0 0 12px rgba(0,0,0,0.4);
-    max-width: 100%;
-    height: auto;
-  }
-  #info { margin: 8px; font-size: 1.2em; }
-  #scores { margin: 8px; }
+  html,body{height:100%;margin:0;padding:0;overflow:hidden}
+  body {font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;padding:0;box-sizing:border-box;overflow:hidden;height:100vh}
+  canvas {display:block;width:100%;height:100%;background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%);position:absolute;top:0;left:0;padding-top:70px;box-sizing:border-box}
+  #info {display:none}
+  h1{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;margin:0;font-size:32px;font-weight:700;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
+  #scores {position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #scores span{font-weight:600;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #scores button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #scores button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
@@ -42,7 +29,7 @@
   <span id="magentaScoreContainer" style="display:none"> — <span id="lblMagenta">Magenta</span>: <span id="sMagenta">0</span></span>
     <button id="fs" style="margin-left:12px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
-  <canvas id="c" width="700" height="400"></canvas>
+  <canvas id="c"></canvas>
   <div id="msg" style="position:fixed;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
     <div id="msgInner" style="background:rgba(0,0,0,0.6);padding:18px 28px;border-radius:10px;color:#fff;font-size:40px;text-align:center;min-width:220px;">
       <div id="msgMain">3</div>
@@ -53,7 +40,21 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
-// runtime-safe logger: attempts to write to #info if present, otherwise falls back to console
+// Define track first before using in resizeCanvas
+const track = {length: 0};
+
+// Fullscreen canvas setup
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  track.length = canvas.width - 120;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const colors = {blue:'#3b82f6', red:'#ef4444', yellow:'#fbbf24', green:'#10b981', orange:'#f97316', purple:'#a855f7', cyan:'#06b6d4', magenta:'#ec4899'};
+
+// runtime-safe logger
 function appendLog(msg){
   try{
     const el = document.getElementById('info');
@@ -61,22 +62,25 @@ function appendLog(msg){
     else console.log(msg);
   }catch(e){ console.log(msg); }
 }
-// Room id extraction from URL - defined early so startCountdown() can use ROOM_ID
+
+// Room id extraction from URL
 function getRoomId() {
   const params = new URLSearchParams(window.location.search);
   let room = params.get('room');
   if (!room || room.length !== 3) {
-    room = 'DEF'; // fallback
+    room = 'DEF';
   }
   return room.toUpperCase();
 }
 const ROOM_ID = getRoomId();
+
 // Read player count from URL parameter
 function getPlayerCountFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return Math.max(2, Math.min(8, parseInt(params.get('players') || '2', 10)));
 }
 let playerCount = getPlayerCountFromUrl();
+
 const yellowScoreContainer = document.getElementById('yellowScoreContainer');
 const greenScoreContainer = document.getElementById('greenScoreContainer');
 const orangeScoreContainer = document.getElementById('orangeScoreContainer');
@@ -92,12 +96,10 @@ const sPurple = document.getElementById('sPurple');
 const sCyan = document.getElementById('sCyan');
 const sMagenta = document.getElementById('sMagenta');
 
-const colors = {blue:'#4ea1ff', red:'#ff6b6b', yellow:'#ffd86b', green:'#8fe58f', orange:'#ffae42', purple:'#b388ff', cyan:'#4deeea', magenta:'#ff6bd6'};
 let ws=null;
 let activeRoles = ['blue','red'];
 let scores = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
 let players = {};
-const track = {length: canvas.width - 120}; // finish line position
 let raceRunning = false;
 let countdown = 3; // seconds before race start
 let countdownTimer = null;
@@ -115,10 +117,12 @@ function initPlayers(){
   cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
   magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
   players={};
-  const laneHeight = canvas.height / activeRoles.length;
+  const topPadding = 70;
+  const usableHeight = canvas.height - topPadding;
+  const laneHeight = usableHeight / activeRoles.length;
   let i=0;
   for(const role of activeRoles){
-    players[role]={x:80,y:laneHeight*(i+0.5),speed:0,power:0};
+    players[role]={x:80,y:topPadding + laneHeight*(i+0.5),speed:0,power:0};
     i++;
   }
   // Set score colors in HUD
@@ -215,35 +219,88 @@ function startCountdown(){
 // draw track and riders
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // lanes
+  // lanes with alternating colors
   const n=activeRoles.length;
-  const laneH=canvas.height/n;
+  const topPadding = 70;
+  const usableHeight = canvas.height - topPadding;
+  const laneH=usableHeight/n;
   for(let i=0;i<n;i++){
-    ctx.fillStyle = (i%2===0)?'#222':'#1a1a1a';
-    ctx.fillRect(0,i*laneH,canvas.width,laneH);
+    const grad = ctx.createLinearGradient(0, i*laneH, 0, (i+1)*laneH);
+    if(i%2===0){
+      grad.addColorStop(0, '#1a1a2e');
+      grad.addColorStop(1, '#16162a');
+    } else {
+      grad.addColorStop(0, '#16162a');
+      grad.addColorStop(1, '#121226');
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, topPadding + i*laneH, canvas.width, laneH);
+    // lane divider
+    if(i > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, topPadding + i*laneH);
+      ctx.lineTo(canvas.width, topPadding + i*laneH);
+      ctx.stroke();
+    }
   }
 
-  // finish line
+  // finish line with glow
+  ctx.shadowColor = 'rgba(255,255,255,0.5)';
+  ctx.shadowBlur = 15;
   ctx.strokeStyle='#fff';
   ctx.lineWidth=4;
   ctx.setLineDash([10,8]);
   ctx.beginPath();
-  ctx.moveTo(track.length+50,0);
+  ctx.moveTo(track.length+50,topPadding);
   ctx.lineTo(track.length+50,canvas.height);
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
 
-  // riders + boost meters
+  // riders with enhanced graphics
   for(const role of activeRoles){
     const p = players[role];
-    // draw rider
-    ctx.fillStyle = colors[role];
+    const rad = 20;
+    // glow
+    ctx.globalAlpha = 0.25;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 16, 0, Math.PI*2);
+    const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad * 2.5);
+    glow.addColorStop(0, colors[role]);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow;
+    ctx.arc(p.x, p.y, rad * 2.5, 0, Math.PI*2);
     ctx.fill();
-    ctx.strokeStyle='#fff';
+    ctx.globalAlpha = 1;
+    
+    // main circle with gradient
+    ctx.beginPath();
+    const grad = ctx.createRadialGradient(p.x - rad*0.3, p.y - rad*0.3, rad*0.1, p.x, p.y, rad);
+    grad.addColorStop(0, colors[role] + 'ee');
+    grad.addColorStop(0.7, colors[role]);
+    grad.addColorStop(1, colors[role]);
+    ctx.fillStyle = grad;
+    ctx.arc(p.x, p.y, rad, 0, Math.PI*2);
+    ctx.fill();
+    
+    // highlight
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    const highlight = ctx.createRadialGradient(p.x - rad*0.3, p.y - rad*0.3, 0, p.x - rad*0.3, p.y - rad*0.3, rad*0.5);
+    highlight.addColorStop(0, 'rgba(255,255,255,0.9)');
+    highlight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = highlight;
+    ctx.arc(p.x - rad*0.25, p.y - rad*0.25, rad*0.4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    
+    // outline
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle='rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, rad, 0, Math.PI*2);
     ctx.stroke();
-
   }
 }
 
