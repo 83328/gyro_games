@@ -5,38 +5,43 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Blasters</title>
 <style>
+  html,body{height:100%;margin:0;padding:0}
   body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: radial-gradient(circle at center, #000010 0%, #000 100%);
-    color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px;
+    font-family:'Segoe UI',Arial,Helvetica,sans-serif;
+    background:#000;
+    color:#eee;
+    overflow:hidden;
   }
   canvas {
-    background: radial-gradient(circle at center, #000, #050512 70%, #000 100%);
-    border: 2px solid #222;
-    border-radius: 10px;
-    box-shadow: 0 0 12px rgba(0,0,0,0.5);
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:radial-gradient(ellipse at center, #0d1224 0%, #060a15 50%, #000000 100%);
   }
-  #info { margin: 8px; font-size: 1.1em; }
-  #scores { margin: 8px; }
+  h1{display:none}
+  /* Glass HUD */
+  .hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+  .role{padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-weight:600;font-size:14px;transition:all 0.3s ease;border:1px solid rgba(255,255,255,0.1);text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  .role:hover{background:rgba(255,255,255,0.12);transform:translateY(-2px)}
+  button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
   <h1>Blasters</h1>
-  
-  <div id="scores">
-    <button id="newRound" style="margin-left:12px;display:none">New round</button>
-  <span id="blueScoreContainer">Blue: <span id="sBlue">0</span></span> — <span id="redScoreContainer">Red: <span id="sRed">0</span></span>
-  <span id="yellowScoreContainer" style="display:none"> — <span id="lblYellow">Yellow</span>: <span id="sYellow">0</span></span>
-  <span id="greenScoreContainer" style="display:none"> — <span id="lblGreen">Green</span>: <span id="sGreen">0</span></span>
-  <span id="orangeScoreContainer" style="display:none"> — <span id="lblOrange">Orange</span>: <span id="sOrange">0</span></span>
-  <span id="purpleScoreContainer" style="display:none"> — <span id="lblPurple">Purple</span>: <span id="sPurple">0</span></span>
-  <span id="cyanScoreContainer" style="display:none"> — <span id="lblCyan">Cyan</span>: <span id="sCyan">0</span></span>
-  <span id="magentaScoreContainer" style="display:none"> — <span id="lblMagenta">Magenta</span>: <span id="sMagenta">0</span></span>
+
+  <div class="hud">
+    <div class="role" id="blueScoreContainer">Blue <span id="sBlue">0</span></div>
+    <div class="role" id="redScoreContainer">Red <span id="sRed">0</span></div>
+    <div class="role" id="yellowScoreContainer" style="display:none">Yellow <span id="sYellow">0</span></div>
+    <div class="role" id="greenScoreContainer" style="display:none">Green <span id="sGreen">0</span></div>
+    <div class="role" id="orangeScoreContainer" style="display:none">Orange <span id="sOrange">0</span></div>
+    <div class="role" id="purpleScoreContainer" style="display:none">Purple <span id="sPurple">0</span></div>
+    <div class="role" id="cyanScoreContainer" style="display:none">Cyan <span id="sCyan">0</span></div>
+    <div class="role" id="magentaScoreContainer" style="display:none">Magenta <span id="sMagenta">0</span></div>
+    <button id="newRound" style="display:none">New round</button>
   </div>
+
   <canvas id="c" width="700" height="600"></canvas>
 
 <script>
@@ -108,32 +113,29 @@ const HIT_FLASH_DURATION = 0.15; // seconds
 const BULLET_MAX_BOUNCES = 2;
 
 function resizeCanvasToDisplay(){
-  const headerH = (document.querySelector('h1')?.offsetHeight || 40) + (document.getElementById('info')?.offsetHeight || 30) + (document.getElementById('scores')?.offsetHeight || 30) + 36;
-  const vv = window.visualViewport;
-  const availW = Math.max(320, (vv?.width || window.innerWidth) - 24);
-  const availH = Math.max(300, (vv?.height || window.innerHeight) - headerH - 24);
-  // rectangular canvas similar to blob: fill available space within caps
-  const W = Math.max(400, Math.min(1400, Math.floor(availW)));
-  const H = Math.max(300, Math.min(1000, Math.floor(availH)));
-  canvas.width = W;
-  canvas.height = H;
-  // update center and spawn radius relative to min dimension
+  const oldCenter = {x:CENTER_X, y:CENTER_Y};
+  const oldSpawn = SPAWN_RADIUS || 1;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const size = Math.min(w,h);
+  canvas.width = w;
+  canvas.height = h;
   CENTER_X = canvas.width/2; CENTER_Y = canvas.height/2;
-  SPAWN_RADIUS = Math.floor(Math.min(canvas.width, canvas.height) * 0.36);
-  // ship scale relative to the original 700 baseline; double the visual size
-  SHIP_SCALE = (canvas.width / 700) * 2.0;
-  // reposition players around center if they already exist, preserve angle
+  SPAWN_RADIUS = Math.floor(size * 0.38);
+  SHIP_SCALE = Math.max(1.2, (size/700) * 1.6);
+  // reposition players relative to new center
   for(const role of Object.keys(players)){
     const p = players[role];
-    p.x = CENTER_X + Math.cos(p.angle - Math.PI/2) * SPAWN_RADIUS;
-    p.y = CENTER_Y + Math.sin(p.angle - Math.PI/2) * SPAWN_RADIUS;
+    const ang = p.angle - Math.PI/2;
+    // keep their angular slot, adjust radius proportionally
+    const dist = Math.hypot(p.x - oldCenter.x, p.y - oldCenter.y);
+    const scaledDist = dist * (SPAWN_RADIUS/oldSpawn);
+    p.x = CENTER_X + Math.cos(ang) * scaledDist;
+    p.y = CENTER_Y + Math.sin(ang) * scaledDist;
   }
 }
 
-// listen to viewport/resize
-if(window.visualViewport){ window.visualViewport.addEventListener('resize', resizeCanvasToDisplay); window.visualViewport.addEventListener('scroll', resizeCanvasToDisplay); }
 window.addEventListener('resize', resizeCanvasToDisplay);
-// apply initial sizing immediately
 resizeCanvasToDisplay();
 
 // Winner splash overlay (similar to paint)

@@ -5,33 +5,43 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Asteroid Sweepers</title>
 <style>
+  html,body{height:100%;margin:0;padding:0}
   body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: radial-gradient(circle at center, #000010 0%, #000 100%);
-    color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px;
+    font-family:'Segoe UI',Arial,Helvetica,sans-serif;
+    background:#000;
+    color:#eee;
+    overflow:hidden;
   }
   canvas {
-    background: #111;
-    border: 2px solid #333;
-    border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:radial-gradient(ellipse at center, #0f1a2e 0%, #060b18 50%, #000000 100%);
   }
-  #info { margin: 8px; font-size: 1.2em; }
-  #scores { margin: 8px; text-align: center; }
-  #scores span { margin: 0 4px; }
+  h1{display:none}
+  /* Glass HUD */
+  .hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+  .role{padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-weight:600;font-size:14px;transition:all 0.3s ease;border:1px solid rgba(255,255,255,0.1);text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  .role:hover{background:rgba(255,255,255,0.12);transform:translateY(-2px)}
+  button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
   <h1>Asteroid Sweepers</h1>
-  
-  <div id="scores">
-    <button id="restart" style="margin-left:8px">Restart</button>
-    <div id="scoreDisplay"></div>
+
+  <div class="hud">
+    <div class="role" id="blueRole">Blue <span id="sBlue">0</span></div>
+    <div class="role" id="redRole">Red <span id="sRed">0</span></div>
+    <div class="role" id="yellowRole" style="display:none">Yellow <span id="sYellow">0</span></div>
+    <div class="role" id="greenRole" style="display:none">Green <span id="sGreen">0</span></div>
+    <div class="role" id="orangeRole" style="display:none">Orange <span id="sOrange">0</span></div>
+    <div class="role" id="purpleRole" style="display:none">Purple <span id="sPurple">0</span></div>
+    <div class="role" id="cyanRole" style="display:none">Cyan <span id="sCyan">0</span></div>
+    <div class="role" id="magentaRole" style="display:none">Magenta <span id="sMagenta">0</span></div>
+    <button id="restart">Restart</button>
   </div>
+
   <canvas id="c" width="800" height="600"></canvas>
 
 <script>
@@ -62,7 +72,26 @@ function applyPlayerCountFromMeta(newCount){
   window.history.replaceState({}, '', `${window.location.pathname}?${qs}`);
   resetGame('Player count updated');
 }
-const scoreDisplay = document.getElementById('scoreDisplay');
+const roleBadges = {
+  blue: document.getElementById('blueRole'),
+  red: document.getElementById('redRole'),
+  yellow: document.getElementById('yellowRole'),
+  green: document.getElementById('greenRole'),
+  orange: document.getElementById('orangeRole'),
+  purple: document.getElementById('purpleRole'),
+  cyan: document.getElementById('cyanRole'),
+  magenta: document.getElementById('magentaRole')
+};
+const scoreSpans = {
+  blue: document.getElementById('sBlue'),
+  red: document.getElementById('sRed'),
+  yellow: document.getElementById('sYellow'),
+  green: document.getElementById('sGreen'),
+  orange: document.getElementById('sOrange'),
+  purple: document.getElementById('sPurple'),
+  cyan: document.getElementById('sCyan'),
+  magenta: document.getElementById('sMagenta')
+};
 
 const colorPalette = [
   '#4ea1ff', '#ff6b6b', '#ffd86b', '#8fe58f',
@@ -94,9 +123,8 @@ let activeRoles = [];
 let players = {};
 let scores = {};
 let asteroids = [];
-const ASTEROID_COUNT = 6;
-const ARENA_RADIUS = 270;
-const ARENA_CENTER = {x: canvas.width/2, y: canvas.height/2};
+let ARENA_RADIUS = 270;
+let ARENA_CENTER = {x: canvas.width/2, y: canvas.height/2};
 
 function resetGame(reason){
   gameActive = true;
@@ -114,9 +142,10 @@ function initPlayers() {
   const angleStep = (2 * Math.PI) / n;
   for (let i = 0; i < n; i++) {
     const angle = i * angleStep;
+    const spawnR = ARENA_RADIUS * 0.74;
     players[activeRoles[i]] = {
-      x: ARENA_CENTER.x + Math.cos(angle) * 200,
-      y: ARENA_CENTER.y + Math.sin(angle) * 200,
+      x: ARENA_CENTER.x + Math.cos(angle) * spawnR,
+      y: ARENA_CENTER.y + Math.sin(angle) * spawnR,
       vx: 0, vy: 0,
       color: colorPalette[i],
       baseAngle: angle
@@ -150,13 +179,20 @@ function initAsteroids() {
 }
 
 function updateScoreDisplay() {
-  scoreDisplay.innerHTML = '';
-  for (let i = 0; i < activeRoles.length; i++) {
-    const r = activeRoles[i];
-    const span = document.createElement('span');
-    span.style.color = colorPalette[i];
-    span.textContent = `${colorNames[i]}: ${scores[r]}`;
-    scoreDisplay.appendChild(span);
+  for(const role of colorNames.map(n=>n.toLowerCase())){
+    const badge = roleBadges[role];
+    const span = scoreSpans[role];
+    const idxActive = activeRoles.indexOf(role);
+    const paletteIdx = colorNames.findIndex(n=>n.toLowerCase()===role);
+    const visible = idxActive !== -1;
+    if(badge){
+      badge.style.display = visible ? '' : 'none';
+      badge.style.color = colorPalette[paletteIdx] || '#fff';
+    }
+    if(span){
+      span.textContent = scores[role] ?? 0;
+      span.style.color = colorPalette[paletteIdx] || '#fff';
+    }
   }
 }
 
@@ -282,7 +318,7 @@ function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   // Draw arena boundary
-  ctx.strokeStyle = '#333';
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(ARENA_CENTER.x,ARENA_CENTER.y,ARENA_RADIUS,0,Math.PI*2);
@@ -332,6 +368,37 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// fullscreen sizing
+function resizeCanvasToDisplay(){
+  const oldCenter = {...ARENA_CENTER};
+  const oldRadius = ARENA_RADIUS;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const size = Math.min(w,h);
+  canvas.width = w;
+  canvas.height = h;
+  ARENA_CENTER = {x: w/2, y: h/2};
+  ARENA_RADIUS = Math.max(200, size * 0.42);
+  const scale = ARENA_RADIUS / oldRadius;
+  // reposition players relative to new center
+  for(const role of Object.keys(players)){
+    const p = players[role];
+    const ang = Math.atan2(p.y - oldCenter.y, p.x - oldCenter.x);
+    const dist = Math.hypot(p.x - oldCenter.x, p.y - oldCenter.y) * scale;
+    p.x = ARENA_CENTER.x + Math.cos(ang) * dist;
+    p.y = ARENA_CENTER.y + Math.sin(ang) * dist;
+  }
+  // reposition asteroids
+  for(const a of asteroids){
+    const ang = Math.atan2(a.y - oldCenter.y, a.x - oldCenter.x);
+    const dist = Math.hypot(a.x - oldCenter.x, a.y - oldCenter.y) * scale;
+    a.x = ARENA_CENTER.x + Math.cos(ang) * dist;
+    a.y = ARENA_CENTER.y + Math.sin(ang) * dist;
+  }
+}
+window.addEventListener('resize', resizeCanvasToDisplay);
+resizeCanvasToDisplay();
 
 // Room id extraction from URL
 function getRoomId() {

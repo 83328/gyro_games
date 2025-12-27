@@ -5,34 +5,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Gyro Sumo</title>
 <style>
-  html,body{height:100%}
+  html,body{height:100%;margin:0;padding:0}
   body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: #111;
-    color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  padding: 18px 18px 56px 18px;
-    margin:0; box-sizing:border-box; overflow:hidden;
+    font-family:'Segoe UI',Arial,Helvetica,sans-serif;
+    background:#000;
+    color:#eee;
+    overflow:hidden;
   }
   canvas {
-    background: #222;
-    border: 2px solid #333;
-    border-radius: 50%;
-    box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%);
   }
-  #info { margin: 8px; }
-  #scores { margin: 8px; }
-  button {
-    padding: 4px 10px;
-    border: none;
-    border-radius: 6px;
-    background: #1f6feb;
-    color: white;
-    cursor: pointer;
-  }
-  button:hover { background: #2b7eff; }
+  h1{position:fixed;top:70px;left:50%;transform:translateX(-50%);margin:0;z-index:999;font-size:24px;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
+  /* Glass HUD */
+  .hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+  .role{padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-weight:600;font-size:14px;transition:all 0.3s ease;border:1px solid rgba(255,255,255,0.1);text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  .role:hover{background:rgba(255,255,255,0.12);transform:translateY(-2px)}
+  button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
@@ -41,18 +33,15 @@
     <span id="splashText" style="font-size:4em;font-weight:bold;color:#fff;text-shadow:0 0 24px #000"></span>
   </div>
   
-  <div id="scores">
-  <span style="color:#4ea1ff">Blue: <span id="sBlue">0</span></span> —
-    <span style="color:#ff6b6b">Red: <span id="sRed">0</span></span>
-    <span id="yellowScoreContainer" style="display:none;color:#ffd86b"> — Yellow: <span id="sYellow">0</span></span>
-    <span id="greenScoreContainer" style="display:none;color:#8fe58f"> — Green: <span id="sGreen">0</span></span>
-    <span id="orangeScoreContainer" style="display:none;color:#ffae42"> — Orange: <span id="sOrange">0</span></span>
-    <span id="purpleScoreContainer" style="display:none;color:#b388ff"> — Purple: <span id="sPurple">0</span></span>
-    <span id="cyanScoreContainer" style="display:none;color:#4deeea"> — Cyan: <span id="sCyan">0</span></span>
-    <span id="magentaScoreContainer" style="display:none;color:#ff6bd6"> — Magenta: <span id="sMagenta">0</span></span>
-  </div>
-
-  <div id="controls" style="margin-bottom:8px;">
+  <div class="hud">
+    <div class="role" id="blueRole">Blue <span id="sBlue">0</span></div>
+    <div class="role" id="redRole">Red <span id="sRed">0</span></div>
+    <div class="role" id="yellowRole" style="display:none">Yellow <span id="sYellow">0</span></div>
+    <div class="role" id="greenRole" style="display:none">Green <span id="sGreen">0</span></div>
+    <div class="role" id="orangeRole" style="display:none">Orange <span id="sOrange">0</span></div>
+    <div class="role" id="purpleRole" style="display:none">Purple <span id="sPurple">0</span></div>
+    <div class="role" id="cyanRole" style="display:none">Cyan <span id="sCyan">0</span></div>
+    <div class="role" id="magentaRole" style="display:none">Magenta <span id="sMagenta">0</span></div>
     <button id="calibBtn">Calibrate</button>
   </div>
 
@@ -81,16 +70,16 @@ const sBlue = document.getElementById('sBlue');
 const sRed = document.getElementById('sRed');
 const sYellow = document.getElementById('sYellow');
 const sGreen = document.getElementById('sGreen');
-const yellowScoreContainer = document.getElementById('yellowScoreContainer');
-const greenScoreContainer = document.getElementById('greenScoreContainer');
 const sOrange = document.getElementById('sOrange');
 const sPurple = document.getElementById('sPurple');
 const sCyan = document.getElementById('sCyan');
 const sMagenta = document.getElementById('sMagenta');
-const orangeScoreContainer = document.getElementById('orangeScoreContainer');
-const purpleScoreContainer = document.getElementById('purpleScoreContainer');
-const cyanScoreContainer = document.getElementById('cyanScoreContainer');
-const magentaScoreContainer = document.getElementById('magentaScoreContainer');
+const yellowBadge = document.getElementById('yellowRole');
+const greenBadge = document.getElementById('greenRole');
+const orangeBadge = document.getElementById('orangeRole');
+const purpleBadge = document.getElementById('purpleRole');
+const cyanBadge = document.getElementById('cyanRole');
+const magentaBadge = document.getElementById('magentaRole');
 
 let ws=null;
 const players = {};
@@ -110,23 +99,12 @@ const FRICTION = 0.92;
 const PUSH_FORCE = 1.5;
 
 function resizeCanvasToDisplay(){
-  const padW = 24;
-  const h1h = (document.querySelector('h1') ? document.querySelector('h1').getBoundingClientRect().height : 40);
-  const infoH = (document.getElementById('info') ? document.getElementById('info').getBoundingClientRect().height : 0);
-  const scoresH = (document.getElementById('scores') ? document.getElementById('scores').getBoundingClientRect().height : 0);
-  const controlsH = (document.getElementById('controls') ? document.getElementById('controls').getBoundingClientRect().height : 0);
-  const reservedH = h1h + infoH + scoresH + controlsH + 160; // larger reserved bottom margin to avoid clipping
-  const availW = Math.max(300, window.innerWidth - padW);
-  const availH = Math.max(300, window.innerHeight - reservedH);
-  const size = Math.min(availW, Math.max(300, availH - 20), 1200);
-  canvas.width = size; canvas.height = size;
-  // arena centered in canvas with slight margin
-  arena.x = canvas.width/2; arena.y = canvas.height/2; arena.radius = Math.min(canvas.width, canvas.height)/2 - 20;
+  const size = Math.min(window.innerWidth, window.innerHeight);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  arena.x = canvas.width/2; arena.y = canvas.height/2; arena.radius = size/2 - 20;
   MAX_SPEED = Math.max(120, arena.radius * 0.6);
-  // responsive minimum arena radius so shrink stops at a proportion of the canvas size
-  // store as property on arena for use in the frame loop
-  arena.minRadius = Math.max(64, Math.min(canvas.width, canvas.height) * 0.18);
-  // reposition players relative to arena center if they exist
+  arena.minRadius = Math.max(48, size * 0.10);
   if(players){
     const startPositions = [
       {x:arena.x - arena.radius*0.55, y:arena.y},
@@ -158,12 +136,12 @@ function initPlayers(){
   activeRoles = possible.slice(0, Math.max(2, Math.min(8, n)));
 
   // toggle score containers
-  yellowScoreContainer.style.display = (n >= 3) ? '' : 'none';
-  greenScoreContainer.style.display = (n >= 4) ? '' : 'none';
-  orangeScoreContainer.style.display = (n >= 5) ? '' : 'none';
-  purpleScoreContainer.style.display = (n >= 6) ? '' : 'none';
-  cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
-  magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
+  if(yellowBadge) yellowBadge.style.display = (n >= 3) ? '' : 'none';
+  if(greenBadge) greenBadge.style.display = (n >= 4) ? '' : 'none';
+  if(orangeBadge) orangeBadge.style.display = (n >= 5) ? '' : 'none';
+  if(purpleBadge) purpleBadge.style.display = (n >= 6) ? '' : 'none';
+  if(cyanBadge) cyanBadge.style.display = (n >= 7) ? '' : 'none';
+  if(magentaBadge) magentaBadge.style.display = (n >= 8) ? '' : 'none';
 
   const startPositions = [
     {x:arena.x - arena.radius*0.55, y:arena.y},
@@ -306,6 +284,12 @@ function checkWinner(){
     showSplash(winner);
     setTimeout(()=>{ hideSplash(); resetRound(); }, 3000);
   }
+  if(alive.length === 0){
+    appendLog(`All fell off! Restarting...`);
+    setTimeout(()=>{ resetRound(); }, 2000);
+  }
+}
+
 // Splash screen logic
 function showSplash(winner) {
   const splash = document.getElementById('splash');
@@ -320,15 +304,11 @@ function hideSplash() {
   const splash = document.getElementById('splash');
   splash.style.display = 'none';
 }
-  if(alive.length === 0){
-    appendLog(`All fell off! Restarting...`);
-    setTimeout(()=>{ resetRound(); }, 2000);
-  }
-}
 
 // round reset
 function resetRound(){
-  arena.radius = 280;
+  const size = Math.min(canvas.width, canvas.height);
+  arena.radius = Math.min(280, size/2 - 20);
   initPlayers();
 }
 
