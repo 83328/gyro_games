@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Moon Lander 2 — Gyro Games</title>
   <style>
-    html,body{height:100%}
-    body{font-family:Arial,Helvetica,sans-serif;background:#050612;color:#e6eefc;display:flex;flex-direction:column;align-items:center;padding:12px 12px 0 12px;box-sizing:border-box;overflow:hidden}
-  canvas{background:linear-gradient(#001, #002233);border:2px solid #223;margin:2px;max-width:100%;height:auto}
-  #msg{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:6px;color:#cfe;font-weight:600;transition:all 0.2s}
+    html,body{height:100%;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#000;color:#e6eefc;overflow:hidden}
+  canvas{position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%)}
+  h1{position:fixed;top:70px;left:50%;transform:translateX(-50%);margin:0;z-index:999;font-size:24px;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
+  #msg{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:12px;color:#cfe;font-weight:600;transition:all 0.2s;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1)}
   #msg.countdown {
     top: 50%;
     bottom: auto;
@@ -20,18 +21,20 @@
     padding: 18px 32px;
     border-radius: 16px;
     z-index: 100;
+    backdrop-filter:blur(10px);
   }
-    .hud{display:flex;gap:12px;align-items:center}
-    button{padding:.4rem .8rem;border-radius:6px;border:none;background:#1f6feb;color:white}
-    .score{font-size:14px}
+    .hud{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+    button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+    button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
+    .score{padding:8px 14px;border-radius:10px;background:rgba(255,255,255,0.08);font-weight:600;font-size:14px;transition:all 0.3s ease;border:1px solid rgba(255,255,255,0.1);text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  /* Top-left countdown badge (glass style) */
+  #countdownBadge{position:fixed;left:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:10px 16px;border-radius:12px;font-size:20px;font-weight:800;z-index:10000;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1)}
   </style>
 </head>
 <body>
-  <h1 style="margin-bottom:4px">Moon Lander</h1>
   
   <div class="hud">
     <button id="restart">Restart</button>
-    <button id="fs">Fullscreen</button>
     <!-- per-role score containers will be appended here -->
     <div id="scoresHolder" class="scores" style="display:flex;gap:12px;align-items:center;margin-left:12px"></div>
   </div>
@@ -69,12 +72,10 @@ let pads = [];
 // Resize canvas to fit available viewport while preserving aspect ratio (without resetting game state)
 const TARGET_ASPECT = 700/420; // original aspect
 function resizeCanvasToDisplay(){
-  // reserve space for header and HUD
-  const headerH = (document.querySelector('h1')?.offsetHeight || 40) + (document.querySelector('.hud')?.offsetHeight || 40) + 32;
   // Prefer visualViewport dimensions when available (handles fullscreen/mobile chrome UI)
   const vv = window.visualViewport;
-  const availW = Math.max(320, (vv?.width || window.innerWidth) - 24);
-  const availH = Math.max(240, ( (vv?.height || window.innerHeight) - headerH - 24));
+  const availW = Math.max(320, (vv?.width || window.innerWidth));
+  const availH = Math.max(240, (vv?.height || window.innerHeight));
   // fit to available area preserving aspect
   let newW = Math.min(availW, Math.floor(availH * TARGET_ASPECT));
   let newH = Math.floor(newW / TARGET_ASPECT);
@@ -249,15 +250,20 @@ function startCountdown(){
   running = false;
   msg.classList.add('countdown');
   msg.textContent = `Starting in ${count}...`;
+  // show badge top-left
+  countdownBadge.style.display = '';
+  countdownBadge.textContent = `Starting in ${count}s`;
   if(_countdownTimer) clearInterval(_countdownTimer);
   _countdownTimer = setInterval(()=>{
     count -= 1;
-    if(count > 0){ msg.textContent = `Starting in ${count}...`; }
+    if(count > 0){ msg.textContent = `Starting in ${count}...`; countdownBadge.textContent = `Starting in ${count}s`; }
     else {
       clearInterval(_countdownTimer);
       msg.textContent = 'Go!';
       setTimeout(() => { msg.classList.remove('countdown'); }, 700);
       _countdownTimer = null;
+      // hide badge when run begins
+      countdownBadge.style.display = 'none';
       beginRun();
     }
   }, 1000);
@@ -271,52 +277,73 @@ function beginRun(){
   if(_intermissionTimer){ clearInterval(_intermissionTimer); _intermissionTimer = null; }
 }
 
-// initial layout
-resizeCanvasToDisplay();
-resetRound();
 
 // respond to window size changes
 window.addEventListener('resize', ()=>{ resizeCanvasToDisplay(); });
 
-// fullscreen toggle
-const fsBtn = document.getElementById('fs');
-fsBtn.addEventListener('click', ()=>{
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen?.();
-  } else {
-    document.exitFullscreen?.();
-  }
-});
-
-// adjust on fullscreen change
-document.addEventListener('fullscreenchange', ()=>{ setTimeout(resizeCanvasToDisplay, 80); });
-
 // draw
 function drawGround(){
-  ctx.fillStyle='#223'; ctx.beginPath(); ctx.moveTo(0,H);
+  ctx.beginPath(); ctx.moveTo(0,H);
   for(const p of ground) ctx.lineTo(p.x,p.y);
-  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+  ctx.lineTo(W,H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, H-100, 0, H);
+  grad.addColorStop(0, '#334');
+  grad.addColorStop(0.7, '#223');
+  grad.addColorStop(1, '#112');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  // Add subtle glow along top edge
+  ctx.strokeStyle = 'rgba(100,120,150,0.3)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }
 
 function drawPads(){
   for(const [i,p] of pads.entries()){
     // pad colored by role
     const color = p.role==='blue' ? '#4ea1ff' : p.role==='red' ? '#ff6b6b' : p.role==='yellow' ? '#ffd86b' : p.role==='green' ? '#8fe58f' : p.role==='orange' ? '#ff9f4d' : p.role==='purple' ? '#b58cff' : p.role==='cyan' ? '#4de6e6' : '#ff6bff';
+    const colorLight = p.role==='blue' ? '#60a5fa' : p.role==='red' ? '#f87171' : p.role==='yellow' ? '#fcd34d' : p.role==='green' ? '#34d399' : p.role==='orange' ? '#fb923c' : p.role==='purple' ? '#c084fc' : p.role==='cyan' ? '#22d3ee' : '#f472b6';
     ctx.save();
+    // Glow effect
     if(p.landed){
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 18;
+      ctx.globalAlpha = 0.4;
+      const glow = ctx.createRadialGradient(p.x, p.y-2, 0, p.x, p.y-2, p.w*0.8);
+      glow.addColorStop(0, colorLight);
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(p.x - p.w*0.8, p.y-6-p.w*0.5, p.w*1.6, p.w*0.8);
+      ctx.globalAlpha = 1;
     }
-    ctx.fillStyle = p.landed ? '#fff' : color;
+    // Main pad with gradient
+    const grad = ctx.createLinearGradient(p.x, p.y-6, p.x, p.y+4);
+    if(p.landed){
+      grad.addColorStop(0, '#fff');
+      grad.addColorStop(0.5, colorLight);
+      grad.addColorStop(1, color);
+    } else {
+      grad.addColorStop(0, colorLight);
+      grad.addColorStop(1, color);
+    }
+    ctx.fillStyle = grad;
     ctx.fillRect(p.x - p.w/2, p.y-6, p.w, 10);
-    ctx.strokeStyle = p.landed ? color : '#fff';
-    ctx.lineWidth = p.landed ? 3 : 1;
+    // Glass highlight
+    ctx.globalAlpha = 0.5;
+    const highlight = ctx.createLinearGradient(p.x, p.y-6, p.x, p.y-2);
+    highlight.addColorStop(0, 'rgba(255,255,255,0.8)');
+    highlight.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = highlight;
+    ctx.fillRect(p.x - p.w/2, p.y-6, p.w, 4);
+    ctx.globalAlpha = 1;
+    // Border
+    ctx.strokeStyle = p.landed ? color : 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = p.landed ? 2.5 : 1.5;
     ctx.strokeRect(p.x - p.w/2, p.y-6, p.w, 10);
     ctx.restore();
   }
 }
 
 function drawLander(pl, color){
+  const colorLight = color==='#4ea1ff' ? '#60a5fa' : color==='#ff6b6b' ? '#f87171' : color==='#ffd86b' ? '#fcd34d' : color==='#8fe58f' ? '#34d399' : color==='#ff9f4d' ? '#fb923c' : color==='#b58cff' ? '#c084fc' : color==='#4de6e6' ? '#22d3ee' : '#f472b6';
   // Check if lander is off screen
   if(pl.x < 0 || pl.x > W || pl.y < 0 || pl.y > H){
     // Draw triangle at edge and show coordinates
@@ -328,36 +355,117 @@ function drawLander(pl, color){
     if(pl.y < 0) { ty = 12; angle = Math.PI/2; }
     if(pl.y > H) { ty = H-12; angle = -Math.PI/2; }
     ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle);
+    // Glow
+    ctx.globalAlpha = 0.3;
     ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(0,-14); ctx.lineTo(12,14); ctx.lineTo(-12,14); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    // Main triangle with gradient
+    const grad = ctx.createLinearGradient(0, -10, 0, 10);
+    grad.addColorStop(0, colorLight);
+    grad.addColorStop(1, color);
+    ctx.fillStyle = grad;
     ctx.beginPath(); ctx.moveTo(0,-10); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
     ctx.restore();
     // Show coordinates
     ctx.save();
     ctx.font = '13px monospace';
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 4;
     ctx.fillText(`${pl.x.toFixed(0)},${pl.y.toFixed(0)}`, tx, ty+22);
+    ctx.shadowBlur = 0;
     ctx.restore();
     return;
   }
-  // Draw normal lander
+  // Draw normal lander with glass effects
   ctx.save(); ctx.translate(pl.x, pl.y); ctx.rotate(pl.angle);
-  ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
-  // flame
-  if(pl.thrust>0 && pl.fuel>0){ ctx.fillStyle='orange'; ctx.beginPath(); ctx.moveTo(-6,10); ctx.lineTo(0,10+Math.random()*8*pl.thrust); ctx.lineTo(6,10); ctx.closePath(); ctx.fill(); }
+  // Outer glow
+  ctx.globalAlpha = 0.2;
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
+  glow.addColorStop(0, colorLight);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(14,14); ctx.lineTo(-14,14); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  // Main lander with gradient
+  const grad = ctx.createLinearGradient(0, -12, 0, 10);
+  grad.addColorStop(0, colorLight);
+  grad.addColorStop(0.6, color);
+  grad.addColorStop(1, color);
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.fill();
+  // Glossy highlight
+  ctx.globalAlpha = 0.5;
+  const highlight = ctx.createLinearGradient(0, -12, 0, -2);
+  highlight.addColorStop(0, 'rgba(255,255,255,0.9)');
+  highlight.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = highlight;
+  ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(6,2); ctx.lineTo(-6,2); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+  // Border
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(8,10); ctx.lineTo(-8,10); ctx.closePath(); ctx.stroke();
+  // flame with glow
+  if(pl.thrust>0 && pl.fuel>0){
+    const flameHeight = 10+Math.random()*8*pl.thrust;
+    // Flame glow
+    ctx.globalAlpha = 0.4;
+    const flameGlow = ctx.createRadialGradient(0, 10+flameHeight*0.5, 0, 0, 10+flameHeight*0.5, flameHeight*0.8);
+    flameGlow.addColorStop(0, '#ffff00');
+    flameGlow.addColorStop(0.5, '#ff8800');
+    flameGlow.addColorStop(1, 'rgba(255,0,0,0)');
+    ctx.fillStyle = flameGlow;
+    ctx.beginPath(); ctx.arc(0, 10+flameHeight*0.5, flameHeight*0.8, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // Flame gradient
+    const flameGrad = ctx.createLinearGradient(0, 10, 0, 10+flameHeight);
+    flameGrad.addColorStop(0, '#ffff88');
+    flameGrad.addColorStop(0.3, '#ff8800');
+    flameGrad.addColorStop(1, '#ff4400');
+    ctx.fillStyle = flameGrad;
+    ctx.beginPath(); ctx.moveTo(-6,10); ctx.lineTo(0,10+flameHeight); ctx.lineTo(6,10); ctx.closePath(); ctx.fill();
+  }
   ctx.restore();
 }
 
 function drawHUD(){
-  // Draw fuel bars on top right
-  const fw = 120, fh = 8;
+  // Draw fuel bars on top right with glass style
+  const fw = 120, fh = 10;
   let fy = 8;
   for(const role of Object.keys(players)){
     const p = players[role];
-    ctx.fillStyle='#333'; ctx.fillRect(W - fw - 10, fy, fw, fh);
+    // Background with glass effect
+    ctx.fillStyle='rgba(0,0,0,0.4)';
+    ctx.fillRect(W - fw - 10, fy, fw, fh);
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(W - fw - 10, fy, fw, fh);
     // color by role
     const color = role==='blue' ? '#4ea1ff' : role==='red' ? '#ff6b6b' : role==='yellow' ? '#ffd86b' : role==='green' ? '#8fe58f' : role==='orange' ? '#ff9f4d' : role==='purple' ? '#b58cff' : role==='cyan' ? '#4de6e6' : '#ff6bff';
-    ctx.fillStyle = color; ctx.fillRect(W - fw - 10, fy, fw * (p.fuel/100), fh);
+    const colorLight = role==='blue' ? '#60a5fa' : role==='red' ? '#f87171' : role==='yellow' ? '#fcd34d' : role==='green' ? '#34d399' : role==='orange' ? '#fb923c' : role==='purple' ? '#c084fc' : role==='cyan' ? '#22d3ee' : '#f472b6';
+    const fuelWidth = fw * (p.fuel/100);
+    if(fuelWidth > 0){
+      // Fuel bar gradient
+      const fuelGrad = ctx.createLinearGradient(W - fw - 10, fy, W - fw - 10, fy + fh);
+      fuelGrad.addColorStop(0, colorLight);
+      fuelGrad.addColorStop(1, color);
+      ctx.fillStyle = fuelGrad;
+      ctx.fillRect(W - fw - 10, fy, fuelWidth, fh);
+      // Highlight
+      ctx.globalAlpha = 0.5;
+      const hlGrad = ctx.createLinearGradient(W - fw - 10, fy, W - fw - 10, fy + fh*0.5);
+      hlGrad.addColorStop(0, 'rgba(255,255,255,0.6)');
+      hlGrad.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = hlGrad;
+      ctx.fillRect(W - fw - 10, fy, fuelWidth, fh*0.4);
+      ctx.globalAlpha = 1;
+    }
     fy += fh + 8;
   }
 }
@@ -373,12 +481,16 @@ function startIntermission(){
   running = false;
   let countdown = 3;
   msg.textContent = `Round complete — restarting in ${countdown}`;
+  countdownBadge.style.display = '';
+  countdownBadge.textContent = `Restarting in ${countdown}s`;
   _intermissionTimer = setInterval(()=>{
     countdown -= 1;
     if(countdown > 0){
       msg.textContent = `Round complete — restarting in ${countdown}`;
+      countdownBadge.textContent = `Restarting in ${countdown}s`;
     } else {
       clearInterval(_intermissionTimer); _intermissionTimer = null;
+      countdownBadge.style.display = 'none';
       resetRound();
     }
   }, 1000);
@@ -500,6 +612,17 @@ const ROOM_ID = getRoomId();
   rb.textContent = `Room: ${ROOM_ID}`;
   window.__setRoomBadge = function(s){ if(rb) rb.textContent = s; };
 })();
+
+// Top-left countdown badge
+const countdownBadge = (function(){
+  let cb = document.getElementById('countdownBadge');
+  if(!cb){ cb = document.createElement('div'); cb.id='countdownBadge'; cb.style.display='none'; document.body.appendChild(cb); }
+  return cb;
+})();
+
+// initial layout (after badges exist)
+resizeCanvasToDisplay();
+resetRound();
 
 // websocket hookup reuse /api/token
 let ws = null;
