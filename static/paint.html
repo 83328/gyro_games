@@ -5,24 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Paint</title>
 <style>
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: #0a0a0a;
-    color: #eee;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px;
-  }
-  canvas {
-    background: #111;
-    border: 2px solid #333;
-    border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.4);
-  }
-  h1 { margin-top: 36px; }
-  #info { margin: 8px; font-size: 1.2em; }
-  #scores { margin: 8px; }
+  html,body{height:100%;margin:0;padding:0;overflow:hidden}
+  body {font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#000;color:#fff;display:flex;flex-direction:column;align-items:center;padding:0;box-sizing:border-box;overflow:hidden;height:100vh}
+  canvas {display:block;width:100%;height:100%;background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%);position:absolute;top:0;left:0;box-sizing:border-box}
+  h1{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;margin:0;font-size:32px;font-weight:700;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
+  #info {display:none}
+  #scores {position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #scores .role{font-weight:600;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5);padding:4px 8px;border-radius:8px;background:rgba(255,255,255,0.05)}
+  #scores button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #scores button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
+  #countdownBadge{position:fixed;left:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:10px 16px;border-radius:12px;font-size:20px;font-weight:800;z-index:10000;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1)}
+  #roomBadge{position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700;z-index:10000;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1)}
 </style>
 </head>
 <body>
@@ -37,11 +30,9 @@
     <span id="purpleScoreContainer" class="role" style="display:none">Purple <span id="sPurple">0</span></span>
     <span id="cyanScoreContainer" class="role" style="display:none">Cyan <span id="sCyan">0</span></span>
     <span id="magentaScoreContainer" class="role" style="display:none">Magenta <span id="sMagenta">0</span></span>
-    <button id="restart" style="margin-left:6px">Restart</button>
-    <button id="fs" style="margin-left:6px;padding:.3rem .6rem;border-radius:6px;border:none;background:#1f6feb;color:white">Fullscreen</button>
   </div>
-  <canvas id="c" width="600" height="600"></canvas>
-  <div id="roomBadge" style="position:fixed;right:12px;top:12px;background:rgba(0,0,0,0.6);color:#fff;padding:6px 10px;border-radius:6px;font-weight:700">Room: ---</div>
+  <canvas id="c"></canvas>
+  <div id="roomBadge">Room: ---</div>
 
 <script>
 const canvas = document.getElementById('c');
@@ -90,19 +81,31 @@ let ws = null;
 let activeRoles = ['blue','red'];
 let scores = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
 let players = {};
-let paintField;
-const GRID_SIZE = 10;
-let PIX_SIZE = Math.floor(canvas.width / GRID_SIZE);
-let FIELD_COLS = GRID_SIZE;
-let FIELD_ROWS = GRID_SIZE;
+// Freeform painting config (no grid)
+let brushSize = 120; // recalculated in resizeCanvas
+let scoresArea = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
 
-// Initialize empty field
-function initField() {
-  PIX_SIZE = Math.floor(canvas.width / GRID_SIZE);
-  FIELD_COLS = GRID_SIZE;
-  FIELD_ROWS = GRID_SIZE;
-  paintField = Array(FIELD_ROWS).fill(0).map(() => Array(FIELD_COLS).fill(''));
+// Fullscreen canvas setup
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  // dynamic brush size based on canvas size (10x thicker)
+  brushSize = Math.max(60, Math.min(canvas.width, canvas.height) * 0.012 * 10);
+  // Clamp players to new bounds
+  if (players && Object.keys(players).length > 0) {
+    for (const role of activeRoles) {
+      const p = players[role];
+      if (!p) continue;
+      p.x = Math.max(0, Math.min(canvas.width, p.x));
+      p.y = Math.max(0, Math.min(canvas.height, p.y));
+      p.prevX = p.x; p.prevY = p.y;
+    }
+  }
 }
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Freeform: no field grid to initialize
 
 function initPlayers() {
   const n = playerCount;
@@ -115,23 +118,15 @@ function initPlayers() {
   cyanScoreContainer.style.display = (n >= 7) ? '' : 'none';
   magentaScoreContainer.style.display = (n >= 8) ? '' : 'none';
   players = {};
-  // spawn positions: spread out in grid
+  // spawn positions: random across full canvas
   for (let i=0;i<activeRoles.length;i++) {
     const role = activeRoles[i];
-    // place each player in a different grid cell
-    const col = i % GRID_SIZE;
-    const row = Math.floor(i / GRID_SIZE);
-    players[role] = {
-      gridX: col,
-      gridY: row,
-      x: col * PIX_SIZE + PIX_SIZE/2,
-      y: row * PIX_SIZE + PIX_SIZE/2,
-      vx: 0, vy: 0,
-      lastMoveTime: 0
-    };
+    const x = Math.random()*canvas.width;
+    const y = Math.random()*canvas.height;
+    players[role] = { x, y, prevX: x, prevY: y, vx: 0, vy: 0 };
   }
-  initField();
   scores = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
+  scoresArea = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
   sBlue.textContent = 0;
   sRed.textContent = 0;
   sYellow.textContent = 0;
@@ -158,154 +153,63 @@ function applyPlayerCountFromMeta(n){
 }
 
 function handleTilt(role, beta, gamma) {
+  if(!roundActive) return;
   const p = players[role]; if(!p) return;
-  
-  // Movement cooldown to prevent too rapid movement (200ms between moves)
-  const now = Date.now();
-  if (now - p.lastMoveTime < 200) return;
-  
-  // pixelated movement: move one cell per tilt
-  // Increased threshold from 5 to 15 degrees for more precise control
-  let dx = 0, dy = 0;
-  if (Math.abs(gamma) > Math.abs(beta)) {
-    dx = gamma > 15 ? 1 : gamma < -15 ? -1 : 0;
-  }
-  // REVERSE up/down controls: tilting up moves marker down, tilting down moves marker up
-  if (Math.abs(beta) > Math.abs(gamma)) {
-    dy = beta > 15 ? -1 : beta < -15 ? 1 : 0;
-  }
-  
-  // Only update lastMoveTime if actually moving
-  if (dx !== 0 || dy !== 0) {
-    // move in grid
-    let newX = Math.max(0, Math.min(GRID_SIZE-1, p.gridX + dx));
-    let newY = Math.max(0, Math.min(GRID_SIZE-1, p.gridY + dy));
-    if (newX !== p.gridX || newY !== p.gridY) {
-      p.gridX = newX;
-      p.gridY = newY;
-      p.x = p.gridX * PIX_SIZE + PIX_SIZE/2;
-      p.y = p.gridY * PIX_SIZE + PIX_SIZE/2;
-      p.lastMoveTime = now;
-    }
+  // fluid motion from tilt (reverse Y to match earlier control feel)
+  const speedFactor = 0.25; // pixels per degree
+  let dx = gamma * speedFactor;
+  let dy = -beta * speedFactor;
+  const maxSpeed = 20;
+  dx = Math.max(-maxSpeed, Math.min(maxSpeed, dx));
+  dy = Math.max(-maxSpeed, Math.min(maxSpeed, dy));
+  const newX = Math.max(0, Math.min(canvas.width, p.x + dx));
+  const newY = Math.max(0, Math.min(canvas.height, p.y + dy));
+  const dist = Math.hypot(newX - p.x, newY - p.y);
+  if (dist > 0.5) {
+    // draw rounded stroke
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = colors[role];
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = colors[role];
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(p.prevX, p.prevY);
+    ctx.lineTo(newX, newY);
+    ctx.stroke();
+    ctx.restore();
+    // accumulate painted area approximation
+    scoresArea[role] = (scoresArea[role] || 0) + dist * brushSize;
+    // update position
+    p.prevX = newX; p.prevY = newY;
+    p.x = newX; p.y = newY;
   }
 }
 
 function update(dt) {
-  if(!roundActive) return;
-  // paint the cell for each player
-  for (const role of activeRoles) {
-    const p = players[role];
-    if(p.gridX>=0 && p.gridX<FIELD_COLS && p.gridY>=0 && p.gridY<FIELD_ROWS){
-      // Gradual fill: store fill progress per cell per player
-      if(!paintField[p.gridY][p.gridX] || typeof paintField[p.gridY][p.gridX] === 'string') {
-        // Start gradual fill
-        paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
-      } else if(paintField[p.gridY][p.gridX].owner === role && paintField[p.gridY][p.gridX].progress < 1) {
-        // Continue filling
-        paintField[p.gridY][p.gridX].progress = Math.min(1, paintField[p.gridY][p.gridX].progress + 0.5);
-      } else if(paintField[p.gridY][p.gridX].owner !== role) {
-        // Overwrite with new owner, start gradual fill
-        paintField[p.gridY][p.gridX] = {owner: role, progress: 0, entryDir: p.entryDir || {dx:0,dy:0}};
-      }
-    }
-  }
+  // no per-frame painting; strokes are drawn on movement
 }
 
 function draw() {
-  // clear entire canvas each frame so restart/overlay doesn't leave artifacts
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  // draw field
-  for (let r=0; r<FIELD_ROWS; r++) {
-    for (let c=0; c<FIELD_COLS; c++) {
-      const cell = paintField[r][c];
-      if (cell) {
-        let owner, progress, entryDir;
-        if(typeof cell === 'string') {
-          owner = cell; progress = 1; entryDir = {dx:0,dy:0};
-        } else {
-          owner = cell.owner; progress = cell.progress; entryDir = cell.entryDir || {dx:0,dy:0};
-        }
-        ctx.fillStyle = colors[owner];
-        // Gradual fill: fill from entry side
-        let x = c*PIX_SIZE, y = r*PIX_SIZE;
-        let w = PIX_SIZE, h = PIX_SIZE;
-  if(progress < 1) {
-          if(entryDir.dx === 1) { // entered from left
-            ctx.fillRect(x, y, w*progress, h);
-          } else if(entryDir.dx === -1) { // entered from right
-            ctx.fillRect(x+w-w*progress, y, w*progress, h);
-          } else if(entryDir.dy === 1) { // entered from top
-            ctx.fillRect(x, y, w, h*progress);
-          } else if(entryDir.dy === -1) { // entered from bottom
-            ctx.fillRect(x, y+h-h*progress, w, h*progress);
-          } else {
-            ctx.fillRect(x, y, w*progress, h); // default left to right
-          }
-        } else {
-          // draw a filled rect without stroke to avoid white outlines
-          ctx.fillRect(x, y, w, h);
-        }
-      }
-    }
-  }
-  // draw players as square brushes, always on top
-  for (const role of activeRoles) {
-    const p = players[role];
-    ctx.save();
-    // draw player as filled square and a subtle outer stroke only on the player, clipped to the player's rect
-    ctx.fillStyle = colors[role];
-    ctx.fillRect(p.x-PIX_SIZE/2, p.y-PIX_SIZE/2, PIX_SIZE, PIX_SIZE);
-    // subtle outline for player only
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.strokeRect(p.x-PIX_SIZE/2+1, p.y-PIX_SIZE/2+1, PIX_SIZE-2, PIX_SIZE-2);
-    ctx.restore();
-  }
+  // No continuous redraw; strokes persist. HUD overlays handle themselves.
 }
 
 function tallyScores() {
-  const count = {blue:0, red:0, yellow:0, green:0, orange:0, purple:0, cyan:0, magenta:0};
-  for (let r=0; r<FIELD_ROWS; r++) {
-    for (let c=0; c<FIELD_COLS; c++) {
-      const cell = paintField[r][c];
-      let owner = null;
-      if (typeof cell === 'string') {
-        owner = cell;
-      } else if (cell && typeof cell === 'object' && cell.owner) {
-        owner = cell.owner;
-      }
-      if (owner && count[owner] !== undefined) count[owner]++;
-    }
-  }
-  scores = count;
-  // Show scores as percentage of total cells, styled in player color
-  const total = Math.max(1, FIELD_COLS * FIELD_ROWS);
+  const totalArea = activeRoles.reduce((sum, r)=> sum + (scoresArea[r] || 0), 0) || 1;
   for (const role of activeRoles) {
-    const scoreSpan = {
-      blue: sBlue,
-      red: sRed,
-      yellow: sYellow,
-      green: sGreen,
-      orange: sOrange,
-      purple: sPurple,
-      cyan: sCyan,
-      magenta: sMagenta
-    }[role];
-    const pct = Math.round(((scores[role] || 0) / total) * 100);
+    const scoreSpan = { blue: sBlue, red: sRed, yellow: sYellow, green: sGreen, orange: sOrange, purple: sPurple, cyan: sCyan, magenta: sMagenta }[role];
+    const pct = Math.round(((scoresArea[role] || 0) / totalArea) * 100);
     if (scoreSpan) {
       scoreSpan.textContent = `${pct}%`;
       scoreSpan.style.color = colors[role] || '';
       scoreSpan.style.fontWeight = '700';
     }
-    // Show score container for all active roles and set color on container as well
     const containerId = role + 'ScoreContainer';
     const container = document.getElementById(containerId);
-    if (container) {
-      container.style.display = '';
-      container.style.color = colors[role];
-    }
+    if (container) { container.style.display = ''; container.style.color = colors[role]; }
   }
-  // Hide unused score containers
   const allRoles = ['blue','red','yellow','green','orange','purple','cyan','magenta'];
   for (const role of allRoles) {
     if (!activeRoles.includes(role)) {
@@ -319,12 +223,10 @@ function tallyScores() {
 function loop(now) {
   const dt = 1/60;
   update(dt);
-  tallyScores(); // update scores after every update
-  draw();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-// setInterval(tallyScores, 2000); // update scores every 2s (no longer needed)
+setInterval(tallyScores, 1000); // update scores every second
 
 // --- Timer and overlay logic ---
 let roundTime = 35; // seconds
@@ -352,20 +254,9 @@ winOverlay.style.pointerEvents = 'none';
 winOverlay.style.textShadow = '0 1px 0 rgba(255,255,255,0.6)';
 document.body.appendChild(winOverlay);
 
-// prominent countdown badge (top-center)
+// prominent countdown badge (top-right, styled in CSS)
 const countdownBadge = document.createElement('div');
 countdownBadge.id = 'countdownBadge';
-countdownBadge.style.position = 'fixed';
-countdownBadge.style.left = '50%';
-countdownBadge.style.top = '12px';
-countdownBadge.style.transform = 'translateX(-50%)';
-countdownBadge.style.background = 'rgba(0,0,0,0.8)';
-countdownBadge.style.color = '#fff';
-countdownBadge.style.padding = '10px 16px';
-countdownBadge.style.borderRadius = '12px';
-countdownBadge.style.fontSize = '20px';
-countdownBadge.style.fontWeight = '800';
-countdownBadge.style.zIndex = 10000;
 countdownBadge.style.display = 'none';
 document.body.appendChild(countdownBadge);
 
@@ -403,11 +294,12 @@ function startRoundTimer() {
 function endRound() {
   roundActive = false;
   tallyScores();
-  // Find winner(s)
+  // Find winner(s) by painted area
   let maxScore = -1, winners = [];
   for(const r of activeRoles) {
-    if(scores[r] > maxScore) { maxScore = scores[r]; winners = [r]; }
-    else if(scores[r] === maxScore) { winners.push(r); }
+    const val = scoresArea[r] || 0;
+    if(val > maxScore) { maxScore = val; winners = [r]; }
+    else if(val === maxScore) { winners.push(r); }
   }
     if(winners.length === 1) {
     showWinOverlay(winners[0]);
@@ -420,8 +312,8 @@ function endRound() {
     setTimeout(()=>{ winOverlay.style.display = 'none'; }, 6000);
   }
   // Immediately clear the board visuals/state so a new game starts cleanly
-  initField();
-  draw();
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  scoresArea = {blue:0,red:0,yellow:0,green:0,orange:0,purple:0,cyan:0,magenta:0};
 
   // Start a 5-second intermission countdown, then auto-restart a new round
   if (intermissionInterval) { clearInterval(intermissionInterval); intermissionInterval = null; }
@@ -436,35 +328,17 @@ function endRound() {
     if (restartIn <= 0) {
       clearInterval(intermissionInterval);
       intermissionInterval = null;
-      // Fully reset players/field and start the new round
+      // Fully reset players and start the new round
       initPlayers();
       winOverlay.style.display = 'none';
       startRoundTimer();
-      draw();
     }
   }, 1000);
 }
 
-// Restart button logic
-document.getElementById('restart').addEventListener('click', ()=>{
-  // Cancel any pending intermission countdown
-  if (intermissionInterval) { clearInterval(intermissionInterval); intermissionInterval = null; }
-  initPlayers();
-  // initPlayers already calls initField
-  roundActive = true;
-  startRoundTimer();
-  winOverlay.style.display = 'none';
-  draw(); // force redraw to clear field immediately
-});
+// Manual restart removed; rounds auto-restart after intermission
 
-// Fullscreen button logic
-document.getElementById('fs').addEventListener('click', ()=>{
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen?.();
-  } else {
-    document.exitFullscreen?.();
-  }
-});
+// Fullscreen button removed
 
 // Start timer on load
 startRoundTimer();
