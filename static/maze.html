@@ -9,15 +9,15 @@
   body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;background:#000;color:#fff;display:flex;flex-direction:column;height:100vh;margin:0;box-sizing:border-box;overflow:hidden}
   canvas{display:block;width:100%;height:100%;background:radial-gradient(ellipse at center, #1a0a2e 0%, #0f051d 50%, #000000 100%);position:absolute;top:0;left:0}
   h1{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;margin:0;font-size:32px;font-weight:700;text-shadow:0 4px 12px rgba(0,0,0,0.8);display:none}
-  #scores{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #scores{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10001;background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:16px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 32px rgba(0,0,0,0.4);display:none;align-items:center;gap:10px;flex-wrap:wrap}
   #scores span{font-weight:600;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
-  #scores button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
-  #scores button:hover{background:rgba(255,255,255,0.25);transform:translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
+  #calibBtn{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(0,0,0,0.6);padding:10px 18px;border-radius:12px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2);color:#fff;font-weight:600;cursor:pointer;transition:all 0.3s ease;font-size:14px;text-shadow:0 2px 4px rgba(0,0,0,0.5)}
+  #calibBtn:hover{background:rgba(255,255,255,0.25);transform:translateX(-50%) translateY(-2px);box-shadow:0 4px 12px rgba(255,255,255,0.2)}
 </style>
 </head>
 <body>
   <h1>Maze Runner</h1>
-  <div id="scores" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+  <div id="scores">
     <span>Blue: <span id="sBlue">0</span></span> — <span>Red: <span id="sRed">0</span></span>
       <span id="yellowScoreContainer" style="display:none"> — Yellow: <span id="sYellow">0</span></span>
       <span id="greenScoreContainer" style="display:none"> — Green: <span id="sGreen">0</span></span>
@@ -25,8 +25,8 @@
       <span id="purpleScoreContainer" style="display:none"> — Purple: <span id="sPurple">0</span></span>
       <span id="cyanScoreContainer" style="display:none"> — Cyan: <span id="sCyan">0</span></span>
       <span id="magentaScoreContainer" style="display:none"> — Magenta: <span id="sMagenta">0</span></span>
-    <button id="calibBtn" style="margin-left:8px">Calibrate</button>
   </div>
+  <button id="calibBtn">Calibrate</button>
   <canvas id="c" width="600" height="600"></canvas>
 <script>
 const canvas = document.getElementById('c');
@@ -144,19 +144,22 @@ function showWinOverlay(role){
   const color = ROLE_COLORS[role] || '#000';
   winOverlay.style.background = color;
   // ensure readable text: use dark text for light backgrounds and white for dark
-  // quick luminance test
   const hex = color.replace('#','');
   const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
   const lum = 0.2126*r + 0.7152*g + 0.0722*b;
   winOverlay.style.color = (lum > 170) ? '#001' : '#fff';
   winOverlay.textContent = `${role.charAt(0).toUpperCase() + role.slice(1)} scored!`;
   winOverlay.style.display = 'flex';
+  // Show scores HUD on splash
+  const scoresDiv = document.getElementById('scores');
+  if(scoresDiv) scoresDiv.style.display = 'flex';
   // hide after a short delay and start next round
   setTimeout(()=>{
     winOverlay.style.display = 'none';
+    if(scoresDiv) scoresDiv.style.display = 'none';
     roundPending = false;
     resetRound();
-  }, 1400);
+  }, 2200);
 }
 
 const playerCountEl = document.createElement('select');
