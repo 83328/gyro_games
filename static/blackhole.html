@@ -204,7 +204,9 @@ function initPlayers(){
       speedUntil: 0,
       invulUntil: performance.now()/1000 + INVULN_DURATION,
       hitFlashUntil: 0,
-      lastFireInterval: 1.0
+      lastFireInterval: 1.0,
+      health: 100,
+      maxHealth: 100
     };
   }
   timeLeft = 60;
@@ -220,7 +222,7 @@ function initPlayers(){
     cyan: document.getElementById('cyanScoreContainer'),
     magenta: document.getElementById('magentaScoreContainer')
   };
-  const spans = { blue: sBlue, red: sRed, yellow: sYellow, green: sGreen };
+  const spans = { blue: sBlue, red: sRed, yellow: sYellow, green: sGreen, orange: sOrange, purple: sPurple, cyan: sCyan, magenta: sMagenta };
   for(const role of Object.keys(containers)){
     const c = containers[role];
     if(c && activeRoles.includes(role)){
@@ -240,10 +242,7 @@ function resetGame(reason){
   gameMessage = '';
   bullets = [];
   powerup = null;
-  for(const r of Object.keys(scores)) scores[r]=0;
-  for(const k of Object.keys(scoreSpans)){
-    const sp = scoreSpans[k]; if(sp) sp.textContent = 0;
-  }
+  // Note: scores persist across rounds
   if(newRoundBtn) newRoundBtn.style.display='none';
   if(winOverlay){
     winOverlay.style.display='none';
@@ -287,6 +286,31 @@ function draw(){
     ctx.restore();
   }
 
+  // health bars in HUD
+  ctx.save();
+  const barW = 80, barH = 8;
+  let barX = 10, barY = 40;
+  for(const role of activeRoles){
+    const p = players[role];
+    // background
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(barX, barY, barW, barH);
+    // health - always keep role color
+    const healthPct = Math.max(0, p.health / p.maxHealth);
+    ctx.fillStyle = colors[role];
+    ctx.fillRect(barX, barY, barW * healthPct, barH);
+    // border
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+    // label
+    ctx.fillStyle = colors[role];
+    ctx.font = '10px monospace';
+    ctx.fillText(role.charAt(0).toUpperCase(), barX - 12, barY + 7);
+    barY += barH + 4;
+  }
+  ctx.restore();
+
   // ships
   for(const role of activeRoles){
     const p = players[role];
@@ -294,8 +318,8 @@ function draw(){
     ctx.translate(p.x,p.y);
     ctx.rotate(p.angle);
     ctx.fillStyle=colors[role];
-    // ship shape scaled by SHIP_SCALE (1/3 smaller)
-    const s = Math.max(1, Math.floor(8 * SHIP_SCALE * (2/3)));
+    // ship shape scaled by SHIP_SCALE
+    const s = Math.max(1, Math.floor(10 * SHIP_SCALE));
     ctx.beginPath();
     ctx.moveTo(0,-(s+2));
     ctx.lineTo(s, s+2);
@@ -460,16 +484,36 @@ function step(dt){
       const shieldActive = p.shieldUntil && p.shieldUntil > nowSec;
       const dx=b.x-p.x, dy=b.y-p.y;
         // scale hit radius with ship size
-        // reduce hit radius to match smaller ships (2/3 size)
-        const hitR = Math.max(8, Math.floor(12 * SHIP_SCALE * (2/3))); // px
+        const hitR = Math.max(10, Math.floor(16 * SHIP_SCALE)); // px
         if(dx*dx+dy*dy < (hitR * hitR)){
         if(!shieldActive){
-          scores[b.owner]++;
-          const span = scoreSpans[b.owner]; if(span) span.textContent = scores[b.owner];
+          p.health -= 25; // 4 hits to kill
+          if(p.health <= 0){
+            p.health = 0;
+            // give kill point
+            scores[b.owner]++;
+            const span = scoreSpans[b.owner]; if(span) span.textContent = scores[b.owner];
+            // respawn after 2 seconds
+            const respawnRole = role;
+            setTimeout(() => {
+              const rp = players[respawnRole];
+              if(rp) {
+                // respawn at original spawn position
+                const idx = activeRoles.indexOf(respawnRole);
+                const angleStep = (Math.PI*2)/activeRoles.length;
+                const angle = idx * angleStep;
+                rp.x = CENTER_X + Math.cos(angle) * SPAWN_RADIUS;
+                rp.y = CENTER_Y + Math.sin(angle) * SPAWN_RADIUS;
+                rp.vx = 0; rp.vy = 0;
+                rp.health = rp.maxHealth;
+                rp.invulUntil = performance.now()/1000 + INVULN_DURATION;
+              }
+            }, 2000);
+          }
         }
         // hit feedback and knockback on target
         p.hitFlashUntil = nowSec + HIT_FLASH_DURATION;
-        const knock = 60; // px/s impulse
+        const knock = 80; // px/s impulse
         const mag = Math.hypot(b.vx, b.vy) || 1;
         p.vx += (b.vx/mag) * knock;
         p.vy += (b.vy/mag) * knock;
@@ -550,10 +594,10 @@ function handleTilt(role,beta,gamma){
 
   // Left/right (gamma) = rotation speed
   // make rotation less sensitive: divide gamma by a larger factor
-  const rotVal = Math.max(-1, Math.min(1, gamma/70));
-  // reduce turning at high thrust for better control
-  const turnScale = 1 - 0.4 * p.thrust; // 60% at max thrust
-  p.rotSpeed = rotVal * 2.2 * turnScale; // radians per sec
+  const rotVal = Math.max(-1, Math.min(1, gamma/90));
+  // reduce turning at high thrust for better control (less penalty)
+  const turnScale = 1 - 0.2 * p.thrust; // 80% at max thrust
+  p.rotSpeed = rotVal * 1.8 * turnScale; // radians per sec
 }
 
 // simple spatial hash for players to speed up bullet collision checks
