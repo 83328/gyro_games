@@ -249,19 +249,6 @@ function resetGame(reason){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // draw lane markers
-  const n = activeRoles.length;
-  const laneSpacing = Math.min(LANE_WIDTH, canvas.width / (n + 1));
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 1;
-  for(let i=0;i<=n;i++){
-    const x = i * laneSpacing;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-
   // obstacles
   for(const ob of obstacles){
     ctx.save();
