@@ -99,6 +99,11 @@ const POWERUP_SPEED = 140; // px/s for falling powerups
 let powerup = null; // {x,y,speed,kind:'shield'}
 let _powerupTimer = 4.0; // seed early spawn
 
+// Slow-Mo effect
+const SLOW_DURATION = 5.0; // seconds of global slow effect
+const SLOW_FACTOR = 0.6;   // multiply obstacle speed while active
+let slowUntil = 0;         // timestamp (sec) when slow ends
+
 // Prefer spawning obstacles near extreme left/right edges more often
 function biasedEdgeX(margin){
   const w = canvas.width;
@@ -299,8 +304,13 @@ function draw(){
   if(powerup){
     ctx.save();
     ctx.translate(powerup.x, powerup.y);
-    ctx.fillStyle = '#7fd3ff';
-    ctx.strokeStyle = '#bfe8ff';
+    if(powerup.kind === 'slow'){
+      ctx.fillStyle = '#8cff8c';
+      ctx.strokeStyle = '#c8ffc8';
+    } else {
+      ctx.fillStyle = '#7fd3ff';
+      ctx.strokeStyle = '#bfe8ff';
+    }
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0,0,12,0,Math.PI*2);
@@ -310,7 +320,7 @@ function draw(){
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('SH',0,0);
+    ctx.fillText(powerup.kind === 'slow' ? 'SL' : 'SH',0,0);
     ctx.restore();
   }
 
@@ -376,6 +386,14 @@ function draw(){
   const timerText = intermissionTimer ? `Next round in ${Math.max(0, Math.ceil(intermissionLeft))}s` : `Time: ${Math.floor(gameTime)}s`;
   ctx.fillText(timerText, 10, 20);
 
+  // Slow-Mo HUD indicator
+  const nowHUD = performance.now()/1000;
+  if(slowUntil && slowUntil > nowHUD){
+    const rem = Math.ceil(slowUntil - nowHUD);
+    ctx.fillStyle = '#8cff8c';
+    ctx.fillText(`SLOW-MO: ${rem}s`, 10, 40);
+  }
+
   drawGameMessage();
 }
 
@@ -397,11 +415,12 @@ function step(dt){
   _powerupTimer -= dt;
   if(_powerupTimer <= 0 && powerup==null){
     const margin = 40;
+    const kinds = Math.random() < 0.5 ? 'shield' : 'slow';
     powerup = {
       x: margin + Math.random() * (canvas.width - margin*2),
       y: -20,
       speed: POWERUP_SPEED,
-      kind: 'shield'
+      kind: kinds
     };
     _powerupTimer = POWERUP_SPAWN_INTERVAL + Math.random()*6; // make them feel rare
   }
@@ -411,20 +430,52 @@ function step(dt){
   if(_spawnTimer <= 0){
     const margin = 40;
     const x = biasedEdgeX(margin);
-    obstacles.push({
+    const isComet = Math.random() < 0.3; // 30% fast, small comets
+    const ob = {
       x: x,
       y: -30,
-      radius: 15 + Math.random() * 10,
-      speed: OBSTACLE_SPEED_BASE + gameTime * 5 // gradually increase speed
-    });
+      radius: (isComet ? 10 : (15 + Math.random() * 10)),
+      speed: (isComet ? OBSTACLE_SPEED_BASE*1.4 : OBSTACLE_SPEED_BASE) + gameTime * 5,
+      // horizontal oscillation
+      hasOsc: Math.random() < 0.35,
+      baseX: x,
+      oscAmp: 20 + Math.random() * 40, // pixels
+      oscFreq: 0.8 + Math.random() * 1.7, // Hz-ish
+      oscPhase: Math.random() * Math.PI * 2,
+      theta: 0
+    };
+    obstacles.push(ob);
     // Chance to spawn a second obstacle increases over time
     if(Math.random() < Math.min(0.5, gameTime / 60)){
       const x2 = biasedEdgeX(margin);
-      obstacles.push({
+      const ob2 = {
         x: x2,
         y: -30,
         radius: 15 + Math.random() * 10,
-        speed: OBSTACLE_SPEED_BASE + gameTime * 5
+        speed: OBSTACLE_SPEED_BASE + gameTime * 5,
+        hasOsc: Math.random() < 0.35,
+        baseX: x2,
+        oscAmp: 20 + Math.random() * 40,
+        oscFreq: 0.8 + Math.random() * 1.7,
+        oscPhase: Math.random() * Math.PI * 2,
+        theta: 0
+      };
+      obstacles.push(ob2);
+    }
+    // Occasional third obstacle for late-game waves
+    if(gameTime > 25 && Math.random() < 0.15){
+      const x3 = biasedEdgeX(margin);
+      obstacles.push({
+        x: x3,
+        y: -30,
+        radius: 15 + Math.random() * 10,
+        speed: OBSTACLE_SPEED_BASE + gameTime * 5,
+        hasOsc: Math.random() < 0.35,
+        baseX: x3,
+        oscAmp: 20 + Math.random() * 40,
+        oscFreq: 0.8 + Math.random() * 1.7,
+        oscPhase: Math.random() * Math.PI * 2,
+        theta: 0
       });
     }
     // Reduce spawn interval more aggressively as game progresses
@@ -435,7 +486,16 @@ function step(dt){
   // update obstacles
   for(let i=obstacles.length-1;i>=0;i--){
     const ob = obstacles[i];
-    ob.y += ob.speed * dt;
+    // Apply global slow effect
+    const nowSec = performance.now()/1000;
+    const slowActive = slowUntil && slowUntil > nowSec;
+    const speedMul = slowActive ? SLOW_FACTOR : 1;
+    ob.y += ob.speed * dt * speedMul;
+    // Horizontal oscillation
+    if(ob.hasOsc){
+      ob.theta += ob.oscFreq * dt;
+      ob.x = ob.baseX + Math.sin(ob.theta + ob.oscPhase) * ob.oscAmp;
+    }
     if(ob.y > canvas.height + 50){
       obstacles.splice(i,1);
       continue;
@@ -481,8 +541,13 @@ function step(dt){
         const dy = p.y - powerup.y;
         const pickR = Math.max(16, 20 * SHIP_SCALE);
         if(dx*dx + dy*dy < pickR * pickR){
-          p.shieldUntil = nowSec + SHIELD_DURATION;
-          appendLog(`${role} picked up Shield!`);
+          if(powerup.kind === 'slow'){
+            slowUntil = nowSec + SLOW_DURATION;
+            appendLog(`${role} activated Slow-Mo!`);
+          } else {
+            p.shieldUntil = nowSec + SHIELD_DURATION;
+            appendLog(`${role} picked up Shield!`);
+          }
           powerup = null;
           break;
         }
