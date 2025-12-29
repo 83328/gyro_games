@@ -93,11 +93,32 @@ const LANE_WIDTH = 80; // width of each lane
 const OBSTACLE_SPEED_BASE = 200; // px/s
 const SPAWN_INTERVAL = 1.2; // seconds between obstacle spawns
 let _spawnTimer = 0.5; // seed first spawn
-const SHIELD_DURATION = 4.0; // seconds of protection
+const SHIELD_DURATION = 8.0; // seconds of protection (doubled)
 const POWERUP_SPAWN_INTERVAL = 9.0; // base seconds between powerup spawns
 const POWERUP_SPEED = 140; // px/s for falling powerups
 let powerup = null; // {x,y,speed,kind:'shield'}
 let _powerupTimer = 4.0; // seed early spawn
+
+// Prefer spawning obstacles near extreme left/right edges more often
+function biasedEdgeX(margin){
+  const w = canvas.width;
+  const r = Math.random();
+  const edgeBand = Math.max(60, Math.floor(w * 0.18)); // edge zones width
+  const centerBand = Math.max(100, Math.floor(w * 0.30)); // center zone width
+
+  if(r < 0.35){
+    // 35% left edge zone
+    return margin + Math.random() * Math.max(10, edgeBand - margin);
+  } else if(r < 0.65){
+    // 30% center band
+    const start = Math.max(margin, Math.floor((w - centerBand) / 2));
+    const end = Math.min(w - margin, start + centerBand);
+    return start + Math.random() * Math.max(10, end - start);
+  } else {
+    // 35% right edge zone
+    return w - margin - Math.random() * Math.max(10, edgeBand - margin);
+  }
+}
 
 function resizeCanvasToDisplay(){
   const w = window.innerWidth;
@@ -336,10 +357,14 @@ function draw(){
     // shield outline when active
     const nowSec = performance.now()/1000;
     if(p.shieldUntil && p.shieldUntil > nowSec){
+      const radius = Math.max(14, Math.floor(16*SHIP_SCALE));
+      const remaining = Math.max(0, p.shieldUntil - nowSec);
+      const frac = Math.max(0, Math.min(1, remaining / SHIELD_DURATION));
       ctx.strokeStyle = 'rgba(100,200,255,0.9)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(0,0, Math.max(14, Math.floor(16*SHIP_SCALE)), 0, Math.PI*2);
+      // Draw a clockwise arc starting at top, shrinking as time runs out
+      ctx.arc(0,0, radius, -Math.PI/2, -Math.PI/2 + frac * Math.PI * 2, false);
       ctx.stroke();
     }
     ctx.restore();
@@ -385,14 +410,26 @@ function step(dt){
   _spawnTimer -= dt;
   if(_spawnTimer <= 0){
     const margin = 40;
-    const x = margin + Math.random() * (canvas.width - margin*2);
+    const x = biasedEdgeX(margin);
     obstacles.push({
       x: x,
       y: -30,
       radius: 15 + Math.random() * 10,
       speed: OBSTACLE_SPEED_BASE + gameTime * 5 // gradually increase speed
     });
-    _spawnTimer = SPAWN_INTERVAL - Math.min(0.8, gameTime / 60); // spawn faster over time
+    // Chance to spawn a second obstacle increases over time
+    if(Math.random() < Math.min(0.5, gameTime / 60)){
+      const x2 = biasedEdgeX(margin);
+      obstacles.push({
+        x: x2,
+        y: -30,
+        radius: 15 + Math.random() * 10,
+        speed: OBSTACLE_SPEED_BASE + gameTime * 5
+      });
+    }
+    // Reduce spawn interval more aggressively as game progresses
+    const nextInterval = Math.max(0.30, SPAWN_INTERVAL - Math.min(0.9, gameTime / 40));
+    _spawnTimer = nextInterval;
   }
 
   // update obstacles
