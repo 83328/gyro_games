@@ -15,9 +15,9 @@ All the games:
 - **Moon Lander**
 	2-8 players try to land gently on assigned landing pads. Tilt up for thrust and tilt side-to-side to rotate. Watch your fuel level, since it can run out quickly!
 
-- **Pong**
+<!-- - **Pong**
 	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
-
+-->
 - **Blob-eat**
 	Four-player arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
 
@@ -30,9 +30,12 @@ All the games:
 - **Paint**
 	Players control paintbrushes to cover the canvas with their color. The goal is to cover as much area as possible while competing against other players.
 
-- **Asteroid Sweepers**
-	Players control spaceships to collect floating asteroids. The goal is to gather as many asteroids as possible within a time limit.
+- **Space Racer**
+	Players control spaceships to navigate through an asteroid field. The goal is to survive as long as possible while avoiding collisions with asteroids.
 
+<!-- - **Asteroid Sweepers**
+	Players control spaceships to collect floating asteroids. The goal is to gather as many asteroids as possible within a time limit. 
+-->
 - **Blackhole Blaster**
 	Players control spaceships and try to hit each other. The goal is to survive as long as possible while dodging the other ships.
 
