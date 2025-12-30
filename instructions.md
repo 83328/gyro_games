@@ -17,7 +17,7 @@ This will:
 2. Install dependencies automatically (if needed)
 3. Start the server at http://localhost:8080
 
-When cloudflared is running, `games.arthurlimpens.com` will route to your local server.
+When cloudflared is running, `gyro.games` will route to your local server.
 
 ## Alternative: Manual commands
 

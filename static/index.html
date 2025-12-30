@@ -11,6 +11,9 @@
     a.btn{display:block;text-decoration:none;padding:10px 12px;margin:8px 0;background:#1f6feb;color:#fff;border-radius:6px;text-align:center}
     a.btn.secondary{background:#ff6b6b}
     p.small{font-size:12px;color:#a8b4d6;margin:8px 0 0}
+    .help-link{display:inline-flex;align-items:center;gap:8px;text-decoration:none;background:#15213a;color:#e6f0ff;border:1px solid #223;border-radius:18px;padding:6px 12px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.45)}
+    .help-link:hover{background:#1f2d4a}
+    .help-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1f6feb;color:#fff;font-weight:700;font-size:14px}
    /* thumbnail sizing: keep a max ratio of 4:3 by making the thumb container 4:3
      and letting the image cover the box. This prevents very wide images on desktop. */
   .thumb{ display:block; aspect-ratio: 4 / 3; overflow:hidden; border-radius:6px; background:#0b0b0b; position:relative; min-height:120px }
@@ -41,6 +44,13 @@
     </div>
   </div>
   <div class="card" style="text-align:center">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <div style="font-weight:700;">Connect controllers</div>
+      <a class="help-link" href="/help.html" style="padding:6px 10px;">
+        <span class="help-icon">?</span>
+        <span>How to play?</span>
+      </a>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-direction:column">
       <img id="qrImg" alt="QR code" style="width:200px;height:200px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#fff" src="" />
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -144,7 +154,7 @@
   // Build a URL to the streaming page with ?room=ROOMCODE&players=N
   function buildUrl(){
     const players = playerCountSelect.value;
-    return `https://games.arthurlimpens.com/gyro.html?room=${roomCode}&players=${players}`;
+    return `https://gyro.games/gyro.html?room=${roomCode}&players=${players}`;
   }
   function updateGameLinks() {
     const players = playerCountSelect.value;
