@@ -19,10 +19,10 @@ All the games:
 	Classic paddle-vs-paddle demo — each phone controls a paddle angle or position depending on the mode. Good for quick one-on-one testing.
 -->
 - **Blob-eat**
-	Four-player arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
+	Arena where blobs grow by eating smaller blobs. Includes AI neutrals, display-area smoothing for nicer growth animations, and simple collision/eat rules.
 
 - **Turtle-style racer**
-	Small race demos where players 'pedal' by moving the phone. Multiple lane support and finish-line detection make these quick party games.
+	Small racing game where players 'pedal' by moving the phone. Multiple lane support and finish-line detection makes this an easy party game.
 
 - **Sumo Arena**
 	Small arena where players control their sumo wrestlers to push each other out of the ring. Fun for quick matches and testing balance.
@@ -37,9 +37,9 @@ All the games:
 	Players control spaceships to collect floating asteroids. The goal is to gather as many asteroids as possible within a time limit. 
 -->
 - **Blackhole Blaster**
-	Players control spaceships and try to hit each other. The goal is to survive as long as possible while dodging the other ships.
+	Players control spaceships and try to hit each other. The goal is to survive as long as possible while dodging the bullets.
 
-Except for Pong which is for 2 players only, all games support up to 8 players.
+All games support up to 8 players.
 
 ![Thumbnails](media/images/thumb_overview.png)
 
@@ -82,7 +82,7 @@ GYRO_TOKEN=some-secret-token
 - Game selector page: http://<your-host>:8080/index.html
 
 How it works (short)
-- A phone opens `/gyro.html`, selects a role (blue/red/yellow/green), and starts streaming. The page requests device motion/orientation permissions on iOS and sends compact JSON payloads over WebSocket.
+- A phone opens `/gyro.html`, selects a color, and starts streaming. The page requests device motion/orientation permissions on iOS and sends compact JSON payloads over WebSocket.
 - The server forwards messages to all connected clients. Game pages listen on the same WebSocket and apply incoming telemetry to the matching player role.
 
 Controls & calibration

@@ -19,6 +19,8 @@
     .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;background:#1f6feb;color:#fff;text-decoration:none;border-radius:8px;font-weight:700;border:1px solid #284a8f;box-shadow:0 4px 14px rgba(0,0,0,0.45)}
     .btn:hover{background:#2a7bff}
     .note{color:#a8b4d6;font-size:14px;margin-top:6px}
+    .step-img{display:block;width:100%;max-width:420px;border-radius:8px;border:1px solid #223;box-shadow:0 4px 14px rgba(0,0,0,0.45);margin:8px 0 12px}
+    .step-img-wrap{display:flex;justify-content:center}
   </style>
 </head>
 <body>
@@ -30,11 +32,12 @@
     <div class="card">
       <h1>How to play</h1>
       <ol>
-        <li>The game is played on a main screen and on with each player using their phone as a controller.</li>
-        <li>On your main screen, open the game hub (index page). It shows a Room ID and QR code. Pick how many players join.</li>
-        <li>On each phone, scan the QR or open the link. Allow motion/orientation access when asked.</li>
-        <li>Each player taps a color to claim it. Hold the phone in portrait mode (it helps to lock your screen orientation) and tilt to steer your ball/ship/character.</li>
-        <li>Back on the main screen, choose a game. Everyone is already linked by the Room ID.</li>
+        <li>The game is played on a main screen and on with each player using their phone as a controller. On your main screen, open the game hub (index page). It shows a Room ID and QR code. Pick how many players join. On each phone, scan the QR or open the link. Allow motion/orientation access when asked.
+          <div class="step-img-wrap"><img class="step-img" src="/media/images/manual_1scan.jpeg" alt="Scan the QR code on the main screen" /></div>
+        </li>
+        <li>Open a game on the main screen. Each player taps a color to claim it. Hold the phone in portrait mode (it helps to lock your screen orientation) and tilt to steer your ball/ship/character.
+            <div class="step-img-wrap"><img class="step-img" src="/media/images/manual_2open.png" alt="Select a color on your phone" /></div>
+        </li>
       </ol>
       <div class="note">Tip: keep the phone awake; if the screen sleeps the controller stops streaming. Every session also has a unique 3-letter Room ID you can use to join a room, for that there is a text field on the controller page.</div>
     </div>
