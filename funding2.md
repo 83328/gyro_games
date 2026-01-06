@@ -1,52 +1,91 @@
-# Funding Options for Our Project (Berlin, Germany – updated 2026)
+# 🌈 Funding Overview – True Grants Only  
+## Germany 🇩🇪 / Berlin 🐻 / European Union 🇪🇺
 
-This document summarizes **realistic, currently relevant funding options in Berlin**, with a focus on **technology-driven game and interaction projects**.  
-The emphasis is on **technical experimentation, scalability, and real-time systems**, without relying on cultural or narrative criteria.
+This document summarizes **funding options relevant to our project** and clearly distinguishes between  
+✅ **true, non-repayable grants** and ⚠️ **funding instruments with repayment risk**.
+
+🎯 **Our explicit goal**
+
+> **No loans. No credits. No repayment obligations.**  
+> We only pursue **true grants (non-repayable subsidies)**.
+
+📅 Knowledge state: **2026-01-05**
 
 ---
 
-## 1. Berlin Startup Scholarship (Berlin Startup Stipendium)
+## 🔍 1. What we are explicitly looking for
 
-**Status:** Ongoing / recurring (no single fixed annual deadline)  
-**Region:** Berlin only
+We are targeting **public funding programs** with the following properties:
+
+### ✅ Must have
+- 🟢 **Non-repayable**
+- 🟢 No interest
+- 🟢 No equity loss
+- 🟢 Public funding (Berlin / Federal / EU)
+
+### ❌ Must NOT have
+- 🔴 No bank loans
+- 🔴 No conditionally repayable credits
+- 🔴 No revenue-based repayment models
+- 🔴 No “looks like a grant but is legally a loan”
+
+💡 Typical grant structure:
+- 40–80% of eligible project costs funded
+- Remaining share covered by own contribution (cash or work time)
+- Purpose-bound (R&D, prototype, innovation, market entry)
+
+Our model (free/private usage, later B2B monetization) is **compatible with grant logic** and often seen as a **positive factor**.
+
+---
+
+## 🐻 2. Berlin – Startup & Early-Stage Grants
+
+### 🚀 Berlin Startup Scholarship (Berlin Startup Stipendium)
+
+**Type:** 🎁 Grant (living stipend)  
+**Region:** Berlin only  
+**Status:** Ongoing / recurring
 
 **What it is**
-- A **monthly living stipend** for early-stage startup teams working full-time on an MVP and business model.
-- Strong focus on **technology, innovation, and entrepreneurship**.
+- Monthly stipend for early-stage startup teams working **full-time** on MVP and business model
+- Strong focus on **technology, innovation, and entrepreneurship**
 
 **Funding**
-- ~**€2,200 per person per month**
-- Duration: **6 months**
-- Usually for **teams of 2–4 people**
-- Includes **coaching, mentoring, and workspace access**
+- 💶 ~**€2,200 per person / month**
+- ⏱ Duration: **6 months**
+- 👥 Typically **2–4 people**
+- ➕ Coaching, mentoring, workspace access
 
 **Why it fits us**
-- No cultural test
-- No requirement for narrative, art, or cultural originality
-- Well suited for:
+- ✅ No cultural test
+- ✅ No narrative or artistic requirements
+- ✅ Ideal for:
+  - Prototypes & MVPs
   - Experimental technical systems
-  - Prototypes and MVPs
-  - Real-time, multi-device interaction concepts
-- Ideal **before or around company formation**
+  - Real-time & interaction-heavy concepts
+- ✅ Perfect **before or around company formation**
 
-**Key constraints**
-- Team members must work **full-time**
+**Constraints**
+- Full-time commitment required
 - Berlin presence required
+
+➡️ **Verdict:** 🟢 **True grant – very strong fit**
 
 ---
 
-## 2. GründungsBONUS Plus (IBB Berlin)
+### 💼 GründungsBONUS Plus (IBB Berlin)
 
-**Status:** Active (rolling intake, subject to budget)  
-**Region:** Berlin only
+**Type:** 🎁 Grant  
+**Region:** Berlin only  
+**Status:** Active (rolling intake, budget-based)
 
 **What it is**
-- A **direct cash grant** to support early startup and company formation costs.
+- Direct **cash grant** to support early startup & company formation costs
 
 **Funding**
-- Covers **up to 50% of eligible costs**
-- Maximum grant: **€50,000**
-- Applicable within **18 months after company formation**
+- 🟢 Up to **50% of eligible costs**
+- 💶 Maximum **€50,000**
+- 🕒 Applicable within **18 months after company formation**
 
 **Eligible costs**
 - Software development
@@ -57,128 +96,212 @@ The emphasis is on **technical experimentation, scalability, and real-time syste
 - Infrastructure related to founding
 
 **Why it fits us**
-- No cultural test
-- Not games-specific
-- Works well for:
-  - Tech-heavy MVP development
-  - Server, networking, and infrastructure work
-- Can complement other funding (e.g. scholarship or R&D tax credit)
+- ✅ No cultural test
+- ✅ Not games-specific
+- ✅ Excellent for tech-heavy MVP development
+- ✅ Can be combined with other grants
+
+➡️ **Verdict:** 🟢 **True grant – very strong fit**
 
 ---
 
-## 3. Medienboard Berlin-Brandenburg – Games Funding
+## 🎮 3. Berlin – Media & Games Funding (Important distinction)
 
-**Status:** Active, with **periodic submission deadlines**  
-**Region:** Berlin-Brandenburg
+### ⚠️ Medienboard Berlin-Brandenburg – Games / New Media
 
-**What it is**
-- Regional funding program for **games and interactive digital projects**.
+**Type:** ⚠️ *Conditionally repayable loan*  
+**Region:** Berlin-Brandenburg  
+**Status:** Active (jury-based calls)
+
+⚠️ **Critical clarification**
+
+> Funding is legally structured as a  
+> **non-interest-bearing, conditionally repayable loan**.
+
+**What this means**
+- ❌ Not a true grant
+- ❌ Repayment *can* be required
+- ✔️ No interest
+- ✔️ Sometimes feels like a grant in practice — **but not guaranteed**
+
+**Conclusion**
+- ❌ Not risk-free
+- ⚠️ Strategically usable, but **not aligned with our “grants-only” goal**
+
+➡️ **Verdict:** 🟡 **Use with caution – NOT a true grant**
+
+---
+
+## 🇩🇪 4. Germany – Federal Grants (High relevance)
+
+### 🎮 Games Funding of the German Federal Government (BMWK)
+
+**Type:** 🎁 Grant  
+**Level:** Federal (Germany-wide)
+
+**Characteristics**
+- ✅ **Non-repayable**
+- ✅ No interest
+- ✅ No repayment obligation
+- Supports:
+  - Prototypes
+  - Full game production
+  - Innovative gameplay & technology
 
 **Funding**
-- Grants typically in the range of **~€30k–€100k+**, depending on project scope
-- Supports prototype and production phases
+- 💶 Up to **50% of eligible costs**
+- 📏 Minimum project size ~**€300,000**
+- 🧩 Managed by **DLR Projektträger**
 
 **Important notes**
-- Cultural evaluation exists, but is **less rigid** than the federal “Kulturtest”
-- Jury-based decisions
-- Higher risk than pure tech funding, but more open to experimental formats
+- Mandatory consultation before application
+- Costs eligible only **after official project start**
+- Open call (budget-based, no fixed deadline)
 
-**Why it may fit**
-- Regional proximity
-- Openness to experimental, event-based, or interaction-driven games
-- Better odds than national games funding for non-narrative projects
+⚠️ **Critical risk: Cultural Test (Kulturtest)**
+
+- Passing the **mandatory cultural evaluation** is required
+- Our project is **technically focused and retro-inspired**
+- Narrative, artistic, or cultural originality is **not a core feature**
+- Based on current guidelines, there is a **high probability that we will NOT pass the Kulturtest**
+
+**Conclusion**
+- ✅ Legally a **true grant**
+- ⚠️ **High rejection risk due to cultural criteria**
+- ❗ Should be treated as an **optional / opportunistic program**, not a core funding pillar
+
+➡️ **Verdict:** 🟡 **True grant, but high cultural risk**
 
 ---
 
-## 4. Transfer BONUS Gamification / XR (Berlin)
+### 🧪 ZIM – Central Innovation Programme for SMEs
 
-**Status:** Active (rolling intake, project-based approval)  
-**Region:** Berlin only
+**Type:** 🎁 Grant  
+**Level:** Federal (Germany-wide)
 
-**What it is**
-- A **Berlin state-funded program** supporting **technology transfer projects**
-  between creative-tech companies (games, interactive media, XR)
-  and **Berlin-based SMEs or institutions**.
+**Focus**
+- Technical innovation
+- New architectures
+- Real-time systems
+- Networking & scalability
 
 **Funding**
-- Covers **up to 70% of project costs**
-- Typical project volume: **€10,000–€50,000**
-- Duration: usually **6–12 months**
+- 💶 ~**40–55%** of eligible costs
+
+**Why it fits us**
+- No cultural requirements
+- Strong technology focus
+- Ideal for backend, architecture, and systems work
+
+➡️ **Verdict:** 🟢 **True grant – excellent technical match**
+
+---
+
+## 🧩 5. Berlin – Applied Innovation / Transfer Grants
+
+### 🔄 Transfer BONUS Gamification / XR (Berlin)
+
+**Type:** 🎁 Grant  
+**Region:** Berlin only  
+**Status:** Active (rolling intake)
+
+**What it is**
+- Funding for **technology transfer projects**
+- Cooperation between creative-tech companies and **Berlin-based partners**
+
+**Funding**
+- 🟢 Up to **70% of project costs**
+- 💶 Typical volume **€10,000–€50,000**
+- ⏱ Duration **6–12 months**
 
 **Requirements**
-- A **cooperation partner in Berlin** (e.g. SME, organization, institution)
-- Clear **technology transfer** aspect (not pure entertainment)
-- Focus on applied innovation (interactive systems, real-time input, simulation, XR)
+- Berlin-based cooperation partner (SME / institution)
+- Clear applied innovation / transfer aspect
+- Not pure entertainment
 
 **Why it fits us**
 - No cultural test
-- Strong emphasis on **applied technical innovation**
-- Well suited if:
-  - Core interaction or input technology is adapted to non-game contexts
-  - The project involves events, exhibitions, training, or simulation scenarios
+- Strong applied technology focus
+- Excellent if core interaction or system technology is adapted beyond games
 
-**Limitations**
-- Not suitable for standalone game development
-- Requires a concrete external partner and use case
+➡️ **Verdict:** 🟢 **True grant – strong option (partner-dependent)**
 
 ---
 
-## 5. Research Allowance (German R&D Tax Credit – Forschungszulage)
+## 🇪🇺 6. European Union – Grants (Mid to long term)
 
-**Status:** Always open (no deadlines)  
-**Region:** Germany (including Berlin)
+### 🇪🇺 Creative Europe – MEDIA (Games)
 
-**What it is**
-- A **tax-based R&D incentive**, not a grant.
-- Supports **experimental development and applied research**, including software.
+**Type:** 🎁 Grant  
+**Level:** European Union
+
+**Characteristics**
+- Non-repayable
+- Supports innovative interactive works
+- Open to experimental & browser-based formats
 
 **Funding**
-- ~**25% of eligible R&D costs**
-- ~**35% for SMEs**
-- Applies to:
-  - Salaries
-  - Certain internal development efforts
-  - Documented experimental work
+- 💶 Typically **€100k–€200k**
 
-**Why it fits us extremely well**
-- No cultural test
-- No narrative or artistic requirements
-- Ideal for:
-  - Experimental system architecture
-  - Scalability and performance challenges
-  - Real-time interaction and synchronization problems
-- Failure is allowed (technical uncertainty is expected)
-
-**Key requirement**
-- Proper **technical documentation** of uncertainty, experiments, and iterations
+➡️ **Verdict:** 🟢 **True grant – strong future option**
 
 ---
 
-## 6. Other Berlin / Federal Options (Conditional)
+### 🇪🇺 Horizon Europe (Later stage)
 
-### EXIST Startup Grant
-- Only relevant if we have a **formal university affiliation**
-- Strong technology and innovation focus
-- Managed via Berlin universities
+- 🎁 Non-repayable grants
+- Focus on high-risk, high-innovation
+- More complex application process
+- Better suited after technical validation
+
+➡️ **Verdict:** 🟢 **True grant – later stage**
+
+---
+
+## 📊 7. Quick Comparison Table
+
+| Program | Type | Repayable? | Risk |
+|------|------|-----------|------|
+| Berlin Startup Scholarship | Grant | ❌ No | Low |
+| GründungsBONUS Plus | Grant | ❌ No | Low |
+| Federal Games Funding (BMWK) | Grant | ❌ No | ⚠️ Cultural |
+| ZIM (Germany) | Grant | ❌ No | Low |
+| Transfer BONUS (Berlin) | Grant | ❌ No | Low |
+| Creative Europe (EU) | Grant | ❌ No | Low |
+| Horizon Europe | Grant | ❌ No | Low |
+| Medienboard Berlin-Brandenburg | Loan | ⚠️ Possible | Medium |
 
 ---
 
-## Strategic Conclusion
+## 🧭 8. Recommended Funding Strategy
 
-Given our project profile (retro-inspired gameplay combined with **technically ambitious, real-time interaction systems**):
+### 🟢 Phase 1 – Low risk / early stage
+- Berlin Startup Scholarship
+- GründungsBONUS Plus
 
-- ❌ Federal Games Funding (culture test): **high risk**
-- ✅ Berlin Startup Scholarship: **very good fit**
-- ✅ GründungsBONUS Plus: **very good fit**
-- ✅ Transfer BONUS Gamification / XR: **strong option if partner-based**
-- ✅ Research Allowance (R&D tax credit): **core long-term funding pillar**
-- ⚠️ Medienboard Games Funding: **possible, but secondary**
+### 🟢 Phase 2 – Growth & validation
+- ZIM (technology focus)
+- Federal Games Funding *(only opportunistic, Kulturtest risk)*
 
-**Recommended strategy**
-1. Use **Berlin Startup Scholarship** for early full-time work.
-2. Apply for **GründungsBONUS Plus** to cover concrete development costs.
-3. Leverage **Transfer BONUS Gamification / XR** for partner-driven applied projects.
-4. Structure the company (UG) to fully utilize the **R&D tax credit**.
-5. Treat games funding as optional, not core.
+### 🟢 Phase 3 – Scaling & EU visibility
+- Creative Europe
+- Horizon Europe (optional)
+
+⚠️ Medienboard funding can be added **carefully**, but **must not be treated as a true grant**.
 
 ---
+
+## 🧠 9. Key Takeaway
+
+> **Not all “funding” is a grant.**
+>
+> If repayment is possible, it is **not risk-free**.  
+> Our strategy prioritizes **true, non-repayable grants** aligned with our technical and financial risk profile.
+
+---
+
+## ✅ 10. Next Steps (Optional)
+
+- Prepare a **grant-optimized pitch narrative**
+- Map project phases to specific grant calls
+- Build a cost plan aligned with grant eligibility rules
