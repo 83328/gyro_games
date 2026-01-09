@@ -20,48 +20,52 @@
   .thumb img.thumb-img{ width:100%; height:100%; object-fit:cover; object-position:center center; display:block }
   /* overlay label on image */
   .thumb .overlay{ position:absolute; left:0; right:0; bottom:0; padding:8px 10px; color:#eef; font-weight:600; text-align:center; background:linear-gradient(rgba(0,0,0,0.0), rgba(0,0,0,0.6)); }
-  @media(min-width:900px){ .card { width:560px } .thumb-grid{ grid-template-columns: repeat(3, 1fr); gap:8px } }
+  .thumb-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }
+  @media(min-width:700px){ .card { width:780px } .thumb-grid{ grid-template-columns: repeat(3, 1fr); gap:8px } }
   </style>
 </head>
 <body>
   <!-- Room ID and Player Count display -->
   <div class="card" style="text-align:center; margin-bottom:10px;">
-    <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
-      <div style="font-size:18px; font-weight:600; color:#ffd86b; letter-spacing:2px;">Room ID: <span id="roomIdDisplay"></span></div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <label for="playerCount" style="font-size:14px;color:#a8b4d6;">Players:</label>
-        <select id="playerCount" style="padding:4px 8px;border-radius:4px;background:#1f1f1f;color:#fff;border:1px solid #333;">
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-        </select>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <img src="/media/images/logo_full.png" alt="Gyro Games Logo" style="height:auto;width:150px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+        <div style="font-size:18px; font-weight:600; color:#ffd86b; letter-spacing:2px;">Room ID: <span id="roomIdDisplay"></span></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label for="playerCount" style="font-size:14px;color:#a8b4d6;">Players:</label>
+          <select id="playerCount" style="padding:4px 8px;border-radius:4px;background:#1f1f1f;color:#fff;border:1px solid #333;">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </div>
       </div>
-      <a id="addControllerBtn" class="btn secondary" style="padding:6px 14px;font-size:13px;margin:0;" href="#">Add Controller</a>
+      <a class="help-link" href="/help.html" style="padding:6px 10px;">
+        <span class="help-icon">?</span>
+        <span>How to play?</span>
+      </a>
     </div>
   </div>
   <div class="card" style="text-align:center">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
       <div style="font-weight:700;">Connect controllers</div>
-      <a class="help-link" href="/help.html" style="padding:6px 10px;">
-        <span class="help-icon">?</span>
-        <span>How to play?</span>
-      </a>
+      <a id="addControllerBtn" class="help-link" href="#">Add Controller</a>
     </div>
     <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-direction:column">
       <img id="qrImg" alt="QR code" style="width:200px;height:200px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:#fff" src="" />
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
   <button id="copyLink" class="btn" style="padding:.4rem .6rem">Copy link</button>
       </div>
-      <div style="font-size:12px;color:#a8b4d6;margin-top:6px">Scan to open the controller on your phone</div>
+      <div style="font-size:12px;color:#a8b4d6;margin-top:6px">Scan to open a controller on your mobile</div>
     </div>
   </div>
   <div class="card">
     <h1>Games</h1>
-    <div class="thumb-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+    <div class="thumb-grid">
   <a class="thumb" href="/maze.html" title="Maze Runner"><img class="thumb-img" src="/media/images/thumb_maze.png" alt="Maze Runner thumbnail"/><div class="overlay">Maze Runner</div></a>
   <a class="thumb" href="/blob.html" title="Blob Eaters"><img class="thumb-img" src="/media/images/thumb_blob.png" alt="Blob Eaters thumbnail"/><div class="overlay">Blob Eaters</div></a>
   <a class="thumb" href="/lander.html" title="Lander"><img class="thumb-img" src="/media/images/thumb_lander.png" alt="Lander thumbnail"/><div class="overlay">Lander</div></a>
